@@ -1,0 +1,134 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**/*/*",
+      "!**/node_modules",
+      "!**/.next",
+      "!**/dist",
+      "!**/build",
+      "!**/public/r",
+      "!**/backup",
+      "!**/src/routeTree.gen.ts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 100,
+    "attributePosition": "auto"
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "trailingCommas": "none",
+      "semicolons": "asNeeded"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "performance": {
+        "noImgElement": "off"
+      },
+      "suspicious": {
+        "noUnknownAtRules": "off",
+        "noDuplicateProperties": "off",
+        "noArrayIndexKey": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "off"
+      },
+      "a11y": {
+        "noLabelWithoutControl": "off",
+        "useButtonType": "off",
+        "useGenericFontNames": "off",
+        "useSemanticElements": "off",
+        "useAnchorContent": "off",
+        "useValidAnchor": "off"
+      },
+      "complexity": {
+        "noStaticOnlyClass": "off",
+        "noImportantStyles": "off"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "off"
+      }
+    },
+    "domains": {
+      "next": "recommended",
+      "react": "recommended"
+    }
+  },
+  "assist": {
+    "includes": [
+      "**/*/**",
+      "!**/node_modules/**",
+      "!**/.next/**",
+      "!**/dist/**",
+      "!**/build/**",
+      "!**/public/r/**"
+    ],
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              {
+                "type": false,
+                "source": ["react", "react-dom"]
+              },
+              {
+                "type": true,
+                "source": ["react", "react-dom"]
+              },
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["**", "!@/**/*", "!react", "!react-dom"]
+              },
+              {
+                "type": true,
+                "source": ["**"]
+              },
+              ":BLANK_LINE:",
+              {
+                "type": true,
+                "source": [":PATH:", ":URL:"]
+              },
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": [
+                  "**/*.css",
+                  "**/*.scss",
+                  "**/*.sass",
+                  "**/*.less",
+                  "**/*.styl",
+                  "**/*.pcss"
+                ]
+              },
+              ":BLANK_LINE:"
+            ],
+            "identifierOrder": "natural"
+          }
+        }
+      }
+    }
+  }
+}

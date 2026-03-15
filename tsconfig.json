@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "es2017",
+    // "target": "es2022",
+    // "lib": ["es2023"],
+
+    /* Modules */
+    "rootDir": "./",
+    "module": "NodeNext",
+    "resolveJsonModule": true,
+    // "rootDir": "src",
+    // "module": "node16",
+    // "moduleResolution": "node16",
+    // "resolveJsonModule": true,
+
+    /* JavaScript Support */
+    // "allowJs": true,
+
+    /* Emit */
+     "outDir": "./build",
+    // "outDir": "dist",
+    // "sourceMap": true,
+
+    /* Interop Constraints */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    // "esModuleInterop": true,
+    // "forceConsistentCasingInFileNames": true,
+
+    /* Type Checking */
+    "strict": true,
+    // "strict": true,
+    // "noImplicitAny": true,
+  
+    /* Completeness */
+    "skipLibCheck": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "exclude": ["backup"],
+  "ts-node": {
+    // Tell ts-node CLI to install the --loader automatically
+    "esm": true
+  }
+}
