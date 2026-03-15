@@ -9,14 +9,12 @@ import { authService } from "./auth.service"
 import type { FastifyInstance } from "fastify"
 
 import redisClient from "@/config/redis-client"
-import { requireGuest } from "@/middlewares/require-guest"
 import { AppError } from "@/utils/app-error"
 
 export default async function authRoutes(app: FastifyInstance) {
   app.post(
     "/login",
     {
-      preHandler: requireGuest,
       config: {
         rateLimit: {
           max: 5,
@@ -53,7 +51,6 @@ export default async function authRoutes(app: FastifyInstance) {
 
   app.post(
     "/register",
-    // { preHandler: requireGuest },
     {
       config: {
         rateLimit: {
@@ -124,6 +121,7 @@ export default async function authRoutes(app: FastifyInstance) {
   })
 
   // Dev function
+  // TODO: remove in production
   app.get("/getAllRecords", async (_request, reply) => {
     if (!redisClient) {
       return reply.notFound("Redis is not enabled")
