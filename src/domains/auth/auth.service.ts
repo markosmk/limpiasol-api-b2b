@@ -1,4 +1,5 @@
 import { authRepository } from "./auth.repository"
+import type { UserRole } from "@/types/fastify"
 
 import { appEvents, EventTypes } from "@/events/emitter"
 import { AppError } from "@/utils/app-error"
@@ -86,7 +87,7 @@ export const authService = {
     }
   },
 
-  async validateSession(sessionId: string) {
+  async validateSession(sessionId: string): Promise<{ userId: string; role: UserRole } | null> {
     const sessionHash = hashSessionId(sessionId)
 
     // first check cache
@@ -94,7 +95,7 @@ export const authService = {
     if (cached) {
       return {
         userId: cached.userId,
-        role: cached.role
+        role: cached.role as UserRole
       }
     }
 
@@ -126,7 +127,7 @@ export const authService = {
 
     return {
       userId: session.userId,
-      role: session.role
+      role: session.role as UserRole
     }
   },
 
