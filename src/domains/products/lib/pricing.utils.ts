@@ -1,4 +1,5 @@
-import type { PriceValidationResult, PurchaseRules } from "../products.pricing.types"
+import type { PurchaseRule } from "@/db/schema/products.types"
+import type { PriceValidationResult } from "../products.pricing.types"
 
 export type PricingTier = "retail" | "wholesale" | "reseller" | "vip"
 
@@ -41,7 +42,7 @@ export function applyVolumeDiscount(
 
 export function validatePurchaseRules(
   quantity: number,
-  rules: PurchaseRules | null
+  rules: PurchaseRule | null
 ): PriceValidationResult {
   if (!rules) return { valid: true }
 
