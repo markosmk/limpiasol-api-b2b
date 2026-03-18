@@ -36,7 +36,8 @@
     /* Completeness */
     "skipLibCheck": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "#test/*": ["./tests/*"] 
     }
   },
   "exclude": ["backup"],

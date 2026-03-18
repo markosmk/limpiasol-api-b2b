@@ -22,7 +22,13 @@
     "check": "biome check",
     "typecheck": "tsc --noEmit --skipLibCheck --isolatedModules",
     "docker:up": "docker compose -f docker-compose.yml up -d",
-    "docker:down": "docker compose -f docker-compose.yml down"
+    "docker:down": "docker compose -f docker-compose.yml down",
+    "vitest:local": "node --env-file=.env ./node_modules/vitest/vitest.mjs",
+    "test": "pnpm run vitest:local run",
+    "test:watch": "pnpm run vitest:local",
+    "test:ui": "pnpm run vitest:local --ui",
+    "test:coverage": "pnpm run vitest:local run --coverage",
+    "test:e2e": "pnpm run vitest:local run --config vitest.e2e.config.ts"
   },
   "keywords": [],
   "author": "",
@@ -59,6 +65,7 @@
     "ts-node": "^10.9.2",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
   }
 }
