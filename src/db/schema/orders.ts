@@ -12,22 +12,18 @@ import {
   timestamp,
   varchar
 } from "drizzle-orm/mysql-core"
+import {
+  type BillingData,
+  deliveryTypeValues,
+  type InternalNote,
+  orderStatusValues,
+  type PickupLocationData,
+  type ShippingData,
+  timelineEventValues
+} from "./orders.types"
+import { products, productVariants } from "./products"
 import { users } from "./users"
-
-// Order status enum values
-export const orderStatusValues = [
-  "pending", // Recién creado, admin debe revisar
-  "adjusting", // Admin está editando AHORA (bloqueado)
-  "pending_payment", // Revisado por admin, esperando pago,
-  "paid", // Pago confirmado, cuando el admin marca paid, el pedido está listo para la acción física (retirar o enviar).
-  "shipped", // Enviado (solo para deliveryType = "shipping")
-  "ready_pickup", // Listo para retiro (solo para deliveryType = "pickup")
-  "delivered", // Entregado al cliente
-  "cancelled" // Cancelado
-] as const
-
-// Delivery type enum values
-export const deliveryTypeValues = ["shipping", "pickup"] as const
+import type { PurchaseRule } from "./products.types"
 
 export const orders = mysqlTable(
   "orders",
@@ -35,113 +31,62 @@ export const orders = mysqlTable(
     id: varchar("id", { length: 24 })
       .primaryKey()
       .$defaultFn(() => createId()),
-
     // internal use, for contable reports, or export to excel/afip
     orderNumber: serial("order_number"),
     orderCode: char("order_code", { length: 8 }).notNull().unique(),
-
     userId: varchar("user_id", { length: 24 })
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-
     status: mysqlEnum("status", orderStatusValues).notNull().default("pending"),
     deliveryType: mysqlEnum("delivery_type", deliveryTypeValues).notNull(),
 
-    // Shipping data as JSON snapshot
+    // JSON snapshot
     shippingData: json("shipping_data").$type<ShippingData | null>(),
-
-    // Billing data as JSON snapshot
     billingData: json("billing_data").$type<BillingData | null>(),
-
     // Pickup fields (only when deliveryType = "pickup")
     pickupLocationData: json("pickup_location_data").$type<PickupLocationData | null>(),
-    pickupDate: varchar("pickup_date", { length: 20 }), // YYYY-MM-DD format
-    pickupTime: varchar("pickup_time", { length: 50 }), // e.g., "10:00-12:00"
 
     // Common fields /only customer, not editable by admin
     observations: text("observations"),
-    internalNotes: json("internal_notes").$type<InternalNote[] | null>(), //only admin
+    internalNotes: json("internal_notes").$type<InternalNote[] | null>(), // only admin
 
-    // Financial totals (stored for historical accuracy)
+    // totals
     subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
-    taxes: decimal("taxes", { precision: 10, scale: 2 }).notNull().default("0.00"),
-    discounts: decimal("discounts", { precision: 10, scale: 2 }).notNull().default("0.00"),
-    shippingCost: decimal("shipping_cost", { precision: 10, scale: 2 }).notNull().default("0.00"),
+    discounts: decimal("discounts", { precision: 10, scale: 2 }).notNull().default("0"),
+    shippingCost: decimal("shipping_cost", { precision: 10, scale: 2 }).notNull().default("0"),
+    taxes: decimal("taxes", { precision: 10, scale: 2 }).notNull().default("0"),
+    // descuentos/recargos manuales fuera del cálculo automático
+    manualAdjustment: decimal("manual_adjustment", { precision: 10, scale: 2 })
+      .default("0")
+      .notNull(),
+    // ej: subtotal - discounts + shippingCost + taxes + manualAdjustment
     total: decimal("total", { precision: 10, scale: 2 }).notNull(),
 
-    // last modified tracking (for quick info)
-    lastModifiedBy: varchar("last_modified_by", { length: 24 }).references(() => users.id),
-    lastModifiedAt: timestamp("last_modified_at"),
-
-    // Cancellation tracking
+    // cancellation tracking (campos nullable, solo se llenan si status = "cancelled")
     cancelReason: text("cancel_reason"),
-    cancelledBy: varchar("cancelled_by", { length: 24 }).references(() => users.id),
+    // by: ej: userId o 'admin' o 'system'
+    cancelledBy: varchar("cancelled_by", { length: 24 }), //.references(() => users.id),
     cancelledAt: timestamp("cancelled_at"),
 
-    // revision count (útil for badge "Revisado X veces")
-    revisionCount: int("revision_count").default(0),
-
     createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").onUpdateNow().defaultNow().notNull()
+    updatedAt: timestamp("updated_at").onUpdateNow().defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at")
   },
   (table) => [
     index("orders_user_idx").on(table.userId),
     index("orders_status_idx").on(table.status),
     index("orders_code_idx").on(table.orderCode),
     index("orders_created_idx").on(table.createdAt),
-    index("orders_user_status_idx").on(table.userId, table.status)
+    index("orders_user_status_idx").on(table.userId, table.status),
+    index("orders_delivery_status_idx").on(table.deliveryType, table.status)
   ]
 )
 
 export type Order = typeof orders.$inferSelect
 export type OrderInsert = typeof orders.$inferInsert
 
-export interface InternalNote {
-  id: string
-  content: string
-  createdAt: Date
-  createdBy: {
-    id: string
-    name: string
-  }
-  type?: "general" | "urgent" | "customer" | "logistics"
-}
-
-export interface PickupLocationData {
-  id: string
-  name: string
-  address: string
-  phone?: string
-  openingHours?: string
-}
-
-// Type for shipping data JSON
-export interface ShippingData {
-  fullName: string
-  addressLine1: string // Street
-  addressLine2?: string // Number, floor, apartment
-  city: string
-  province: string
-  postalCode: string
-  phone: string
-}
-
-// Type for billing data JSON
-export interface BillingData {
-  useSameAsShipping?: boolean
-  fullName?: string
-  addressLine1?: string
-  addressLine2?: string
-  city?: string
-  province?: string
-  postalCode?: string
-  phone?: string
-  cuit?: string
-  ivaCategory?: string
-}
-
-export const orderHistory = mysqlTable(
-  "order_history",
+export const orderItems = mysqlTable(
+  "order_items",
   {
     id: varchar("id", { length: 24 })
       .primaryKey()
@@ -151,47 +96,84 @@ export const orderHistory = mysqlTable(
       .notNull()
       .references(() => orders.id, { onDelete: "cascade" }),
 
-    userId: varchar("user_id", { length: 24 }).references(() => users.id), // null = sistema
+    // referencia al producto original (para trazabilidad)
+    productId: varchar("product_id", { length: 24 })
+      .notNull()
+      .references(() => products.id, { onDelete: "restrict" }),
 
-    eventType: mysqlEnum("event_type", [
-      "order_created", // Cliente hizo checkout
-      "admin_adjustment", // Admin modificó items/precios
-      "customer_add_on",
-      "status_change", // Cambio de estado (pending_review → pending_payment, etc.)
-      "shipping_changed", // Cambió dirección, tipo o costo de envío
-      "payment_marked", // Admin marcó como pagado
-      "payment_proof_uploaded", // Cliente subió comprobante
-      "note_added", // Admin o cliente agregó nota
-      // otros
-      "cancelled"
-    ]).notNull(),
+    variantId: varchar("variant_id", { length: 24 }).references(() => productVariants.id, {
+      onDelete: "restrict"
+    }),
 
-    // TODO: rever summary unnecesary...
-    summary: varchar("summary", { length: 500 }), // "Ajustó cantidades, eliminó Plato x2"
+    // snapshot
+    productName: varchar("product_name", { length: 255 }).notNull(),
+    productSku: varchar("product_sku", { length: 100 }).notNull(),
+    productImage: varchar("product_image", { length: 512 }),
+    variantName: varchar("variant_name", { length: 100 }), // Ej: "Rojo / XL"
 
-    metadata: json("metadata")
-      .$type<{
-        // more simple
-        itemsChanged?: { productName: string; change: string }[]
-        totalsBefore?: { subtotal: string; shipping: string; total: string }
-        totalsAfter?: { subtotal: string; shipping: string; total: string }
-        // Nota libre
-        note?: string
-        generalChanges?: string[]
-      }>()
-      .default({}),
+    // precio unitario CONGELADO al momento de la compra
+    unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
+    compareAtPrice: decimal("compare_at_price", { precision: 12, scale: 2 }), // Precio de referencia
+    tierType: varchar("tier_type", { length: 20 }), // "retail" | "wholesale" | etc. (qué tier se aplicó)
 
-    totalsSnapshot: json("totals_snapshot").$type<{
-      subtotal: string
-      shipping: string
-      total: string
-    }>(),
+    // cantidad y cálculos de línea
+    quantity: int("quantity").notNull(),
+    volumeDiscountApplied: decimal("volume_discount_applied", { precision: 12, scale: 2 }).default(
+      "0"
+    ),
+    lineSubtotal: decimal("line_subtotal", { precision: 12, scale: 2 }).notNull(), // unitPrice * qty - volumeDiscount
 
-    createdAt: timestamp("created_at").defaultNow().notNull()
+    // reglas de compra aplicadas (snapshot de purchaseRules del producto)
+    purchaseRules: json("purchase_rules").$type<PurchaseRule>(),
+
+    // metadata extra si se necesita (ej: personalizaciones, notas del item)
+    metadata: json("metadata"),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+    deletedAt: timestamp("deleted_at")
   },
   (table) => [
-    index("history_order_idx").on(table.orderId),
-    index("history_event_idx").on(table.eventType),
-    index("history_created_idx").on(table.createdAt)
+    index("order_items_order_idx").on(table.orderId),
+    index("order_items_product_idx").on(table.productId),
+    index("order_items_variant_idx").on(table.variantId),
+    // indice compuesto para queries de reporting: "items vendidos por producto"
+    index("order_items_product_created_idx").on(table.productId, table.createdAt)
+  ]
+)
+
+export type OrderItem = typeof orderItems.$inferSelect
+export type OrderItemInsert = typeof orderItems.$inferInsert
+
+export const ordersTimeline = mysqlTable(
+  "orders_timeline",
+  {
+    id: varchar("id", { length: 24 })
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    orderId: varchar("order_id", { length: 24 })
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    eventType: mysqlEnum("event_type", timelineEventValues).notNull(),
+
+    // for status change events: context of the change
+    fromStatus: varchar("from_status", { length: 20 }),
+    toStatus: varchar("to_status", { length: 20 }),
+
+    changedBy: varchar("changed_by", { length: 24 }), // userId, 'admin', 'system'
+    // Metadata flexible según el evento
+    // Ej:
+    // - status_changed: { reason: "stock_agotado", adminNote: "Cliente pidió cambio de fecha" }
+    // - items_adjusted: { addedItems: [...], removedItems: [...], priceDiff: 15.50 }
+    // - pickup_scheduled: { oldDate: "2024-01-15", newDate: "2024-01-18" }
+    metadata: json("metadata"),
+    createdAt: timestamp("created_at").notNull().defaultNow()
+  },
+  (table) => [
+    index("timeline_order_idx").on(table.orderId),
+    index("timeline_event_type_idx").on(table.eventType),
+    index("timeline_created_idx").on(table.createdAt),
+    // index para queries de "historial de un pedido ordenado por fecha"
+    index("timeline_order_created_idx").on(table.orderId, table.createdAt)
   ]
 )
