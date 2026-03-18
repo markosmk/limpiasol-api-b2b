@@ -5,12 +5,35 @@ import type { FastifyPluginAsync } from "fastify"
 import { AppError } from "@/utils/app-error"
 
 type IssuesValibot = [BaseIssue<unknown>, ...BaseIssue<unknown>[]]
-
+type GlobalError = {
+  statusCode?: number
+  message?: string
+  name?: string
+  code?: string
+  // for routes {schema: {body: ...}}
+  validation?: IssuesValibot
+  // ej: "params", "body", "query"
+  validationContext?: string
+}
 const errorHandlerPlugin: FastifyPluginAsync = async (app) => {
   app.setErrorHandler((error, request, reply) => {
     // extract info safely
-    const err = error as { statusCode?: number; message?: string; name?: string }
+    const err = error as GlobalError
     const name = err.name
+
+    // Valibot validation errors (intercepted by Fastify)
+    if (err.code === "FST_ERR_VALIDATION" && err.validation?.length) {
+      const valibotIssues = err.validation
+      const flatIssues = flatten(valibotIssues)
+
+      return reply.status(400).send({
+        statusCode: 400,
+        code: "validation_error",
+        message: "Los datos enviados no son válidos",
+        issues: flatIssues.nested
+        // error: Object.values(flatIssues.nested || {})[0]?.[0] ?? "Validación fallida"
+      })
+    }
 
     // valibot: errors of validation data
     if (name === "ValiError") {
