@@ -8,6 +8,7 @@ export async function createTestApp(): Promise<FastifyInstance> {
 
   // register plugins as used in production
   await app.register(cookie)
+  await app.register(import("@fastify/sensible"))
   await app.register(import("@fastify/cors"), { origin: "*" })
 
   // register routes with prefix for tests
@@ -20,8 +21,16 @@ export async function createTestApp(): Promise<FastifyInstance> {
 
   // Hook to log errors in tests
   app.setErrorHandler((error, request, reply) => {
-    request.log.error(error)
-    reply.code(500).send({ error: "Internal server error" })
+    const err = error as unknown as { statusCode?: number; message?: string }
+    const statusCode = err.statusCode || 500
+    if (statusCode === 500) {
+      request.log.error(error)
+    }
+    reply.code(statusCode).send({
+      success: false,
+      error: err.message,
+      statusCode
+    })
   })
 
   return app
