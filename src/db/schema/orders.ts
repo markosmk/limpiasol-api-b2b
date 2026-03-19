@@ -145,8 +145,8 @@ export const orderItems = mysqlTable(
 export type OrderItem = typeof orderItems.$inferSelect
 export type OrderItemInsert = typeof orderItems.$inferInsert
 
-export const ordersTimeline = mysqlTable(
-  "orders_timeline",
+export const orderTimeline = mysqlTable(
+  "order_timeline",
   {
     id: varchar("id", { length: 24 })
       .primaryKey()

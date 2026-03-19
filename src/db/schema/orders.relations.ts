@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm"
-import { orderItems, orders, ordersTimeline } from "./orders"
+import { orderItems, orders, orderTimeline } from "./orders"
 import { products, productVariants } from "./products"
 import { users } from "./users"
 
@@ -9,7 +9,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     references: [users.id]
   }),
   items: many(orderItems),
-  timeline: many(ordersTimeline)
+  timeline: many(orderTimeline)
 }))
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
@@ -27,9 +27,9 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   })
 }))
 
-export const ordersTimelineRelations = relations(ordersTimeline, ({ one }) => ({
+export const ordersTimelineRelations = relations(orderTimeline, ({ one }) => ({
   order: one(orders, {
-    fields: [ordersTimeline.orderId],
+    fields: [orderTimeline.orderId],
     references: [orders.id]
   })
 }))
