@@ -1,0 +1,190 @@
+paths:
+  /products:
+    get:
+      summary: Listar productos
+      description: Retorna una lista paginada de productos publicados. Permite filtrar por categoría.
+      operationId: getProducts
+      tags: [Products]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: category
+          in: query
+          description: Slug de la categoría para filtrar.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lista de productos exitosa.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      products: { type: array, items: { $ref: "#/components/schemas/Product" } }
+                      total: { type: integer }
+
+  /products/{slug}:
+    get:
+      summary: Obtener producto por Slug
+      description: Retorna el detalle completo de un producto publicado buscando por su slug amigable.
+      operationId: getProductBySlug
+      tags: [Products]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: Slug único del producto.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detalle del producto (público)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      product: { $ref: "#/components/schemas/Product" }
+                      pricing:
+                        type: object
+                        properties:
+                          base: { $ref: "#/components/schemas/PriceTier" }
+                          note: { type: string }
+        "404":
+          description: Producto no encontrado.
+          content:
+            application/json:
+              schema: { $ref: "../openapi.base.yaml#/components/schemas/Error" }
+
+  /products/{productId}/price:
+    post:
+      summary: Calcular precio real
+      description: |
+        Calcula el precio unitario y total basado en el tier del usuario (retail/reseller),
+        la cantidad solicitada y la variante elegida. Aplica descuentos por volumen y valida reglas de compra.
+      operationId: calculateProductPrice
+      tags: [Products]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                variantId: { type: string, description: "ID de la variante específica (opcional)" }
+                quantity: { type: integer, minimum: 1, description: "Cantidad de unidades a comprar" }
+      responses:
+        "200":
+          description: Cálculo de precio exitoso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      productId: { type: string }
+                      variantId: { type: string, nullable: true }
+                      quantity: { type: integer }
+                      userTier: { type: string, enum: [retail, reseller] }
+                      pricing: { $ref: "#/components/schemas/PriceCalculationResult" }
+        "400":
+          description: Error de validación o reglas de compra incumplidas.
+          content:
+            application/json:
+              schema: { $ref: "../openapi.base.yaml#/components/schemas/Error" }
+        "404":
+          description: Producto o precio base no encontrado para el tier del usuario.
+
+  /products/{productId}/prices:
+    get:
+      summary: Ver todas las opciones de precio
+      description: Lista todas las capas de precio (retail/reseller) y descuentos por volumen para un producto/variante.
+      operationId: getProductPriceOptions
+      tags: [Products]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: variantId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lista de opciones de precio.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      options:
+                        type: array
+                        items: { $ref: "#/components/schemas/PriceTier" }
+
+components:
+  schemas:
+    Product:
+      type: object
+      required: [id, name, slug, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [published, draft, inactive] }
+        description: { type: string }
+        shortDescription: { type: string }
+        sku: { type: string }
+        variants:
+          type: array
+          items: { $ref: "#/components/schemas/ProductVariant" }
+
+    ProductVariant:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sku: { type: string }
+        stock: { type: integer }
+        options: { type: object, additionalProperties: { type: string } }
+
+    PriceTier:
+      type: object
+      properties:
+        tierType: { type: string, enum: [retail, reseller] }
+        price: { type: string }
+        compareAtPrice: { type: string, nullable: true }
+        minQuantity: { type: integer }
+        volumeDiscounts: { type: array, items: { type: object } }
+
+    PriceCalculationResult:
+      type: object
+      properties:
+        unitPrice: { type: string }
+        total: { type: string }
+        discountApplied: { type: boolean }
+        appliedTier: { type: string }
+        note: { type: string }

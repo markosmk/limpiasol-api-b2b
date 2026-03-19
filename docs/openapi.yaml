@@ -1,0 +1,1043 @@
+components:
+  responses:
+    401Unauthorized:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: No autenticado. Sesión expirada o inexistente.
+    403Forbidden:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: No autorizado. El usuario no tiene el rol necesario.
+    500InternalServerError:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: Error interno del servidor.
+  schemas:
+    Address:
+      properties:
+        addressLine1:
+          example: Av. Siempre Viva 123
+          type: string
+        addressLine2:
+          example: Depto 4B
+          nullable: true
+          type: string
+        city:
+          example: Ciudad Autónoma de Buenos Aires
+          type: string
+        fullName:
+          example: Juan Perez
+          type: string
+        phone:
+          example: '1122334455'
+          type: string
+        postalCode:
+          example: '1425'
+          pattern: ^\d{4}$
+          type: string
+        province:
+          example: Buenos Aires
+          type: string
+      required:
+        - fullName
+        - addressLine1
+        - city
+        - province
+        - postalCode
+        - phone
+      type: object
+    AdminCreateProduct:
+      properties:
+        brandId:
+          type: string
+        categories:
+          items:
+            type: string
+          type: array
+        description:
+          type: string
+        name:
+          type: string
+        prices:
+          items:
+            properties:
+              price:
+                type: number
+              sku:
+                description: Opcional. Vincula el precio a una variante específica por SKU
+                type: string
+              tierType:
+                enum:
+                  - retail
+                  - reseller
+                type: string
+            required:
+              - tierType
+              - price
+            type: object
+          type: array
+        slug:
+          type: string
+        status:
+          enum:
+            - published
+            - draft
+            - inactive
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+        variants:
+          items:
+            properties:
+              name:
+                type: string
+              options:
+                type: object
+              sku:
+                type: string
+              stock:
+                type: integer
+            required:
+              - name
+              - sku
+            type: object
+          type: array
+      required:
+        - name
+        - slug
+        - status
+      type: object
+    AdminUpdateProduct:
+      properties:
+        categories:
+          items:
+            type: string
+          type: array
+        description:
+          type: string
+        name:
+          type: string
+        prices:
+          items:
+            $ref: '#/components/schemas/PriceTier'
+          type: array
+        slug:
+          type: string
+        status:
+          enum:
+            - published
+            - draft
+            - inactive
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+        variants:
+          items:
+            properties:
+              id:
+                description: Si se omite, se crea como nueva variante
+                type: string
+              name:
+                type: string
+              sku:
+                type: string
+              stock:
+                type: integer
+            type: object
+          type: array
+      type: object
+    DeliveryType:
+      enum:
+        - shipping
+        - pickup
+      type: string
+    Error:
+      properties:
+        code:
+          example: bad_request
+          type: string
+        issues:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          description: Detalles de validación por campo si aplica.
+          type: object
+        message:
+          example: Solicitud inválida
+          type: string
+        statusCode:
+          example: 400
+          type: integer
+      required:
+        - statusCode
+        - code
+        - message
+      type: object
+    Order:
+      properties:
+        createdAt:
+          format: date-time
+          type: string
+        deliveryType:
+          $ref: '#/components/schemas/DeliveryType'
+        discounts:
+          type: string
+        id:
+          type: string
+        items:
+          items:
+            $ref: '#/components/schemas/OrderItem'
+          type: array
+        orderCode:
+          type: string
+        orderNumber:
+          type: integer
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+        shippingCost:
+          type: string
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        subtotal:
+          type: string
+        taxes:
+          type: string
+        total:
+          type: string
+        updatedAt:
+          format: date-time
+          type: string
+      required:
+        - id
+        - orderCode
+        - status
+        - total
+        - items
+      type: object
+    OrderItem:
+      properties:
+        id:
+          type: string
+        lineSubtotal:
+          type: string
+        productId:
+          type: string
+        productName:
+          type: string
+        productSku:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: string
+        variantId:
+          nullable: true
+          type: string
+      required:
+        - id
+        - productName
+        - unitPrice
+        - quantity
+        - lineSubtotal
+      type: object
+    OrderStatus:
+      enum:
+        - pending
+        - adjusting
+        - pending_payment
+        - paid
+        - shipped
+        - ready_pickup
+        - delivered
+        - cancelled
+      type: string
+    PaginationParams:
+      properties:
+        limit:
+          default: 20
+          example: 20
+          maximum: 100
+          minimum: 1
+          type: integer
+        page:
+          default: 1
+          example: 1
+          minimum: 1
+          type: integer
+      type: object
+    PriceCalculationResult:
+      properties:
+        appliedTier:
+          type: string
+        discountApplied:
+          type: boolean
+        note:
+          type: string
+        total:
+          type: string
+        unitPrice:
+          type: string
+      type: object
+    PriceTier:
+      properties:
+        compareAtPrice:
+          nullable: true
+          type: string
+        minQuantity:
+          type: integer
+        price:
+          type: string
+        tierType:
+          enum:
+            - retail
+            - reseller
+          type: string
+        volumeDiscounts:
+          items:
+            type: object
+          type: array
+      type: object
+    Product:
+      properties:
+        description:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        shortDescription:
+          type: string
+        sku:
+          type: string
+        slug:
+          type: string
+        status:
+          enum:
+            - published
+            - draft
+            - inactive
+          type: string
+        variants:
+          items:
+            $ref: '#/components/schemas/ProductVariant'
+          type: array
+      required:
+        - id
+        - name
+        - slug
+        - status
+      type: object
+    ProductVariant:
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        options:
+          additionalProperties:
+            type: string
+          type: object
+        sku:
+          type: string
+        stock:
+          type: integer
+      type: object
+    User:
+      properties:
+        email:
+          type: string
+        id:
+          type: string
+        role:
+          enum:
+            - retail
+            - reseller
+            - admin
+          type: string
+        status:
+          enum:
+            - active
+            - inactive
+          type: string
+      type: object
+  securitySchemes:
+    cookieAuth:
+      description: Sesión de usuario almacenada en cookie httpOnly.
+      in: cookie
+      name: session
+      type: apiKey
+info:
+  contact:
+    email: soporte@limpiasol.com
+    name: Soporte Limpiasol
+    url: https://limpiasol.com
+  description: API para gestión de pedidos B2B y catálogo mayorista.
+  title: Limpiasol B2B API
+  version: 1.0.0
+openapi: 3.1.0
+paths:
+  /auth/forgot-password:
+    post:
+      description: Envía un email con un token temporal para restablecer la contraseña
+        si la cuenta existe.
+      operationId: forgotPassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                email:
+                  format: email
+                  type: string
+              required:
+                - email
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Instrucciones enviadas si el email está registrado.
+      summary: Solicitar recuperación de contraseña
+      tags:
+        - Auth
+  /auth/login:
+    post:
+      description: Autentica al usuario con sus credenciales y crea una sesión segura
+        almacenada en una cookie httpOnly.
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                email:
+                  example: admin@limpiasol.com
+                  format: email
+                  type: string
+                password:
+                  example: password123
+                  type: string
+              required:
+                - email
+                - password
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  success:
+                    type: boolean
+                  user:
+                    $ref: '#/components/schemas/User'
+                type: object
+          description: Inicio de sesión exitoso.
+          headers:
+            Set-Cookie:
+              description: Token de sesión en cookie httpOnly llamado 'session'.
+              schema:
+                type: string
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Credenciales inválidas o error de validación.
+      summary: Iniciar sesión
+      tags:
+        - Auth
+  /auth/logout:
+    post:
+      description: Invalida la sesión actual del usuario y elimina la cookie del navegador.
+      operationId: logout
+      responses:
+        '200':
+          description: Sesión cerrada correctamente.
+      security:
+        - cookieAuth: []
+      summary: Cerrar sesión
+      tags:
+        - Auth
+  /auth/register:
+    post:
+      description: Crea una cuenta de cliente nueva. Requiere verificación de email
+        posterior (opcional depende config).
+      operationId: register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                email:
+                  format: email
+                  type: string
+                password:
+                  minLength: 8
+                  type: string
+              required:
+                - email
+                - password
+              type: object
+        required: true
+      responses:
+        '201':
+          description: Registro exitoso. Se ha enviado un email de verificación.
+        '400':
+          $ref: '#/components/responses/401Unauthorized'
+      summary: Registrar nuevo usuario
+      tags:
+        - Auth
+  /auth/reset-password:
+    post:
+      description: Cambia la contraseña del usuario utilizando el token recibido por email.
+      operationId: resetPassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                password:
+                  description: Nueva contraseña segura.
+                  minLength: 8
+                  type: string
+                token:
+                  description: Token de recuperación recibido por email.
+                  type: string
+              required:
+                - token
+                - password
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Contraseña actualizada correctamente.
+        '400':
+          description: Token inválido o expirado.
+      summary: Restablecer contraseña con token
+      tags:
+        - Auth
+  /orders:
+    get:
+      description: Retorna el historial de pedidos del usuario autenticado, ordenados
+        por fecha descendente.
+      operationId: getMyOrders
+      parameters:
+        - in: query
+          name: page
+          schema:
+            default: 1
+            minimum: 1
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            default: 20
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      hasMore:
+                        type: boolean
+                      orders:
+                        items:
+                          $ref: '#/components/schemas/Order'
+                        type: array
+                      total:
+                        type: integer
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Lista de pedidos con paginación.
+      security:
+        - cookieAuth: []
+      summary: Listar mis pedidos
+      tags:
+        - Orders
+    post:
+      description: Registra una nueva solicitud de pedido en el sistema. Valida stock
+        y calcula el total transaccionalmente.
+      operationId: createOrder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                deliveryType:
+                  $ref: '#/components/schemas/DeliveryType'
+                items:
+                  items:
+                    properties:
+                      productId:
+                        type: string
+                      quantity:
+                        minimum: 1
+                        type: integer
+                      variantId:
+                        nullable: true
+                        type: string
+                    required:
+                      - productId
+                      - quantity
+                    type: object
+                  minItems: 1
+                  type: array
+                shippingAddress:
+                  $ref: '#/components/schemas/Address'
+              required:
+                - deliveryType
+                - items
+              type: object
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      orderCode:
+                        type: string
+                      orderId:
+                        type: string
+                      total:
+                        type: string
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Pedido creado con éxito.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Error de validación o falta de stock.
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Crear nuevo pedido
+      tags:
+        - Orders
+  /orders/{orderId}:
+    get:
+      description: Retorna la información completa de un pedido específico, incluyendo
+        el detalle de ítems y estado actual.
+      operationId: getOrderDetail
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
+                  success:
+                    type: boolean
+                type: object
+          description: Detalle del pedido obtenido correctamente.
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Pedido no encontrado.
+      security:
+        - cookieAuth: []
+      summary: Obtener detalle de pedido
+      tags:
+        - Orders
+  /products:
+    get:
+      description: Retorna una lista paginada de productos publicados. Permite filtrar
+        por categoría.
+      operationId: getProducts
+      parameters:
+        - in: query
+          name: page
+          schema:
+            default: 1
+            minimum: 1
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            default: 20
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: Slug de la categoría para filtrar.
+          in: query
+          name: category
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      products:
+                        items:
+                          $ref: '#/components/schemas/Product'
+                        type: array
+                      total:
+                        type: integer
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Lista de productos exitosa.
+      summary: Listar productos
+      tags:
+        - Products
+  /products/admin:
+    get:
+      description: Retorna todos los productos incluyendo inactivos y borradores.
+        Requiere privilegios de administrador.
+      operationId: adminGetProducts
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      products:
+                        items:
+                          $ref: '#/components/schemas/Product'
+                        type: array
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Lista de productos exitosa.
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+      security:
+        - cookieAuth: []
+      summary: Listar todos los productos (vista admin)
+      tags:
+        - Admin - Products
+    post:
+      description: Permite crear un producto, sus variantes, precios iniciales y
+        asociaciones en un solo paso (transaccional).
+      operationId: adminCreateProduct
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                product:
+                  $ref: '#/components/schemas/AdminCreateProduct'
+              required:
+                - product
+              type: object
+        required: true
+      responses:
+        '201':
+          description: Producto creado con éxito.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Error de validación en los datos del producto.
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Crear producto con detalles completo
+      tags:
+        - Admin - Products
+  /products/admin/{productId}:
+    delete:
+      description: Elimina un producto y todas sus dependencias (variantes, precios,
+        imágenes) de la base de datos.
+      operationId: adminDeleteProduct
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  success:
+                    type: boolean
+                type: object
+          description: Eliminado con éxito.
+        '404':
+          description: Producto no encontrado.
+      security:
+        - cookieAuth: []
+      summary: Eliminar producto definitivamente
+      tags:
+        - Admin - Products
+    get:
+      description: Retorna toda la información de un producto, incluyendo variantes
+        ocultas y todos los tiers de precio.
+      operationId: adminGetProductDetail
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      product:
+                        $ref: '#/components/schemas/Product'
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: OK
+        '404':
+          description: Producto no encontrado.
+      security:
+        - cookieAuth: []
+      summary: Detalle completo de producto (admin)
+      tags:
+        - Admin - Products
+    put:
+      description: >
+        Actualiza el producto y sincroniza sus variantes, precios y
+        asociaciones.
+
+        Para variantes: si se incluye `id`, se actualiza; si no, se crea una
+        nueva.
+
+        Para precios/tags/cats: se realiza un "sync" (reemplazo completo de la
+        asociación).
+      operationId: adminUpdateProduct
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                product:
+                  $ref: '#/components/schemas/AdminUpdateProduct'
+              required:
+                - product
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Producto actualizado correctamente.
+        '400':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Actualizar producto (Sync parcial)
+      tags:
+        - Admin - Products
+  /products/{productId}/price:
+    post:
+      description: >
+        Calcula el precio unitario y total basado en el tier del usuario
+        (retail/reseller),
+
+        la cantidad solicitada y la variante elegida. Aplica descuentos por
+        volumen y valida reglas de compra.
+      operationId: calculateProductPrice
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                quantity:
+                  description: Cantidad de unidades a comprar
+                  minimum: 1
+                  type: integer
+                variantId:
+                  description: ID de la variante específica (opcional)
+                  type: string
+              required:
+                - quantity
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      pricing:
+                        $ref: '#/components/schemas/PriceCalculationResult'
+                      productId:
+                        type: string
+                      quantity:
+                        type: integer
+                      userTier:
+                        enum:
+                          - retail
+                          - reseller
+                        type: string
+                      variantId:
+                        nullable: true
+                        type: string
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Cálculo de precio exitoso.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Error de validación o reglas de compra incumplidas.
+        '404':
+          description: Producto o precio base no encontrado para el tier del usuario.
+      summary: Calcular precio real
+      tags:
+        - Products
+  /products/{productId}/prices:
+    get:
+      description: Lista todas las capas de precio (retail/reseller) y descuentos por
+        volumen para un producto/variante.
+      operationId: getProductPriceOptions
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: variantId
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      options:
+                        items:
+                          $ref: '#/components/schemas/PriceTier'
+                        type: array
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Lista de opciones de precio.
+      summary: Ver todas las opciones de precio
+      tags:
+        - Products
+  /products/{slug}:
+    get:
+      description: Retorna el detalle completo de un producto publicado buscando por
+        su slug amigable.
+      operationId: getProductBySlug
+      parameters:
+        - description: Slug único del producto.
+          in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      pricing:
+                        properties:
+                          base:
+                            $ref: '#/components/schemas/PriceTier'
+                          note:
+                            type: string
+                        type: object
+                      product:
+                        $ref: '#/components/schemas/Product'
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Detalle del producto (público)
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Producto no encontrado.
+      summary: Obtener producto por Slug
+      tags:
+        - Products
+servers:
+  - description: Desarrollo
+    url: http://localhost:8080
+  - description: Producción
+    url: https://api.limpiasol.com
+tags:
+  - description: Catálogo público de productos y precios.
+    name: Products
+  - description: Gestión de pedidos para clientes.
+    name: Orders
+  - description: Autenticación y gestión de sesiones.
+    name: Auth
+  - description: Gestión administrativa de catálogo (CRUD completo).
+    name: Admin - Products

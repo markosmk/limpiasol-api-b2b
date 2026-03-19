@@ -1,0 +1,153 @@
+# Paths específicos de Orders
+paths:
+  /orders:
+    post:
+      summary: Crear nuevo pedido
+      description: Registra una nueva solicitud de pedido en el sistema. Valida stock y calcula el total transaccionalmente.
+      operationId: createOrder
+      tags: [Orders]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliveryType, items]
+              properties:
+                deliveryType: { $ref: "#/components/schemas/DeliveryType" }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId: { type: string }
+                      variantId: { type: string, nullable: true }
+                      quantity: { type: integer, minimum: 1 }
+                shippingAddress: { $ref: "../openapi.base.yaml#/components/schemas/Address" }
+      responses:
+        "201":
+          description: Pedido creado con éxito.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      orderId: { type: string }
+                      orderCode: { type: string }
+                      total: { type: string }
+        "400":
+          description: Error de validación o falta de stock.
+          content:
+            application/json:
+              schema: { $ref: "../openapi.base.yaml#/components/schemas/Error" }
+        "401":
+          $ref: "../openapi.base.yaml#/components/responses/401Unauthorized"
+
+    get:
+      summary: Listar mis pedidos
+      description: Retorna el historial de pedidos del usuario autenticado, ordenados por fecha descendente.
+      operationId: getMyOrders
+      tags: [Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Lista de pedidos con paginación.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      orders: { type: array, items: { $ref: "#/components/schemas/Order" } }
+                      total: { type: integer }
+                      hasMore: { type: boolean }
+
+  /orders/{orderId}:
+    get:
+      summary: Obtener detalle de pedido
+      description: Retorna la información completa de un pedido específico, incluyendo el detalle de ítems y estado actual.
+      operationId: getOrderDetail
+      tags: [Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detalle del pedido obtenido correctamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/Order" }
+        "404":
+          description: Pedido no encontrado.
+          content:
+            application/json:
+              schema: { $ref: "../openapi.base.yaml#/components/schemas/Error" }
+
+# Components específicos de Orders
+components:
+  schemas:
+    Order:
+      type: object
+      required: [id, orderCode, status, total, items]
+      properties:
+        id: { type: string }
+        orderCode: { type: string }
+        orderNumber: { type: integer }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        deliveryType: { $ref: "#/components/schemas/DeliveryType" }
+        shippingAddress: { $ref: "../openapi.base.yaml#/components/schemas/Address" }
+        subtotal: { type: string }
+        discounts: { type: string }
+        shippingCost: { type: string }
+        taxes: { type: string }
+        total: { type: string }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OrderItem" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    OrderItem:
+      type: object
+      required: [id, productName, unitPrice, quantity, lineSubtotal]
+      properties:
+        id: { type: string }
+        productId: { type: string }
+        variantId: { type: string, nullable: true }
+        productName: { type: string }
+        productSku: { type: string }
+        unitPrice: { type: string }
+        quantity: { type: integer }
+        lineSubtotal: { type: string }
+
+    OrderStatus:
+      type: string
+      enum: [pending, adjusting, pending_payment, paid, shipped, ready_pickup, delivered, cancelled]
+
+    DeliveryType:
+      type: string
+      enum: [shipping, pickup]

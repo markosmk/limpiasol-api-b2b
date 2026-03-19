@@ -12,8 +12,11 @@
     "dev:nodemon": "nodemon --transpileOnly src/server.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file=.env ./scripts/migrate.mjs",
+    "db:reset": "node --env-file=.env ./scripts/db-reset.mjs",
+    "db:push": "drizzle-kit push",
     "db:seed": "tsx --env-file=.env ./scripts/seed.ts",
     "db:studio": "drizzle-kit studio",
+    "db:fresh": "pnpm run db:reset && pnpm run db:push && pnpm run db:seed",
     "email:dev": "email preview ./src/lib/emails/templates --no-open --port 55420",
     "email:check": "email check ./src/lib/emails/templates/welcome.tsx",
     "email:build": "email build ./src/lib/emails/templates --out dist/emails --minify",
@@ -28,7 +31,11 @@
     "test:watch": "pnpm run vitest:local",
     "test:ui": "pnpm run vitest:local --ui",
     "test:coverage": "pnpm run vitest:local run --coverage",
-    "test:e2e": "pnpm run vitest:local run --config vitest.e2e.config.ts"
+    "test:e2e": "pnpm run vitest:local run --config vitest.e2e.config.ts",
+    "docs:bundle": "tsx scripts/bundle-openapi.ts",
+    "docs:watch": "tsx watch scripts/bundle-openapi.ts",
+    "docs:validate": "spectral lint docs/openapi.yaml",
+    "docs:preview": "http-server docs -p 8081"
   },
   "keywords": [],
   "author": "",
@@ -61,11 +68,14 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.7",
+    "@stoplight/spectral-cli": "^6.15.0",
     "@types/node": "^24.12.0",
+    "http-server": "^14.1.1",
     "ts-node": "^10.9.2",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "yaml": "^2.8.2"
   }
 }

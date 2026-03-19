@@ -1,0 +1,120 @@
+paths:
+  /auth/login:
+    post:
+      summary: Iniciar sesión
+      description: Autentica al usuario con sus credenciales y crea una sesión segura almacenada en una cookie httpOnly.
+      operationId: login
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: "admin@limpiasol.com" }
+                password: { type: string, example: "password123" }
+      responses:
+        "200":
+          description: Inicio de sesión exitoso.
+          headers:
+            Set-Cookie:
+              description: Token de sesión en cookie httpOnly llamado 'session'.
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  user: { $ref: "#/components/schemas/User" }
+        "400":
+          description: Credenciales inválidas o error de validación.
+          content:
+            application/json:
+              schema: { $ref: "../openapi.base.yaml#/components/schemas/Error" }
+
+  /auth/register:
+    post:
+      summary: Registrar nuevo usuario
+      description: Crea una cuenta de cliente nueva. Requiere verificación de email posterior (opcional depende config).
+      operationId: register
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "201":
+          description: Registro exitoso. Se ha enviado un email de verificación.
+        "400":
+          $ref: "../openapi.base.yaml#/components/responses/401Unauthorized"
+
+  /auth/logout:
+    post:
+      summary: Cerrar sesión
+      description: Invalida la sesión actual del usuario y elimina la cookie del navegador.
+      operationId: logout
+      tags: [Auth]
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: Sesión cerrada correctamente.
+
+  /auth/forgot-password:
+    post:
+      summary: Solicitar recuperación de contraseña
+      description: Envía un email con un token temporal para restablecer la contraseña si la cuenta existe.
+      operationId: forgotPassword
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: Instrucciones enviadas si el email está registrado.
+
+  /auth/reset-password:
+    post:
+      summary: Restablecer contraseña con token
+      description: Cambia la contraseña del usuario utilizando el token recibido por email.
+      operationId: resetPassword
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string, description: "Token de recuperación recibido por email." }
+                password: { type: string, minLength: 8, description: "Nueva contraseña segura." }
+      responses:
+        "200":
+          description: Contraseña actualizada correctamente.
+        "400":
+          description: Token inválido o expirado.
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [retail, reseller, admin] }
+        status: { type: string, enum: [active, inactive] }

@@ -1,0 +1,186 @@
+paths:
+  /products/admin:
+    get:
+      summary: Listar todos los productos (vista admin)
+      description: Retorna todos los productos incluyendo inactivos y borradores. Requiere privilegios de administrador.
+      operationId: adminGetProducts
+      tags: [Admin - Products]
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: Lista de productos exitosa.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      products: { type: array, items: { $ref: "products.yaml#/components/schemas/Product" } }
+        "401":
+          $ref: "../openapi.base.yaml#/components/responses/401Unauthorized"
+        "403":
+          $ref: "../openapi.base.yaml#/components/responses/403Forbidden"
+
+    post:
+      summary: Crear producto con detalles completo
+      description: Permite crear un producto, sus variantes, precios iniciales y asociaciones en un solo paso (transaccional).
+      operationId: adminCreateProduct
+      tags: [Admin - Products]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product]
+              properties:
+                product: { $ref: "#/components/schemas/AdminCreateProduct" }
+      responses:
+        "201":
+          description: Producto creado con éxito.
+        "400":
+          description: Error de validación en los datos del producto.
+          content:
+            application/json:
+              schema: { $ref: "../openapi.base.yaml#/components/schemas/Error" }
+        "401":
+          $ref: "../openapi.base.yaml#/components/responses/401Unauthorized"
+
+  /products/admin/{productId}:
+    get:
+      summary: Detalle completo de producto (admin)
+      description: Retorna toda la información de un producto, incluyendo variantes ocultas y todos los tiers de precio.
+      operationId: adminGetProductDetail
+      tags: [Admin - Products]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      product: { $ref: "products.yaml#/components/schemas/Product" }
+        "404":
+          description: Producto no encontrado.
+
+    put:
+      summary: Actualizar producto (Sync parcial)
+      description: |
+        Actualiza el producto y sincroniza sus variantes, precios y asociaciones.
+        Para variantes: si se incluye `id`, se actualiza; si no, se crea una nueva.
+        Para precios/tags/cats: se realiza un "sync" (reemplazo completo de la asociación).
+      operationId: adminUpdateProduct
+      tags: [Admin - Products]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product]
+              properties:
+                product: { $ref: "#/components/schemas/AdminUpdateProduct" }
+      responses:
+        "200":
+          description: Producto actualizado correctamente.
+        "400":
+          $ref: "../openapi.base.yaml#/components/responses/401Unauthorized"
+
+    delete:
+      summary: Eliminar producto definitivamente
+      description: Elimina un producto y todas sus dependencias (variantes, precios, imágenes) de la base de datos.
+      operationId: adminDeleteProduct
+      tags: [Admin - Products]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Eliminado con éxito.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+        "404":
+          description: Producto no encontrado.
+
+components:
+  schemas:
+    AdminCreateProduct:
+      type: object
+      required: [name, slug, status]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [published, draft, inactive] }
+        description: { type: string }
+        brandId: { type: string }
+        variants:
+          type: array
+          items:
+            type: object
+            required: [name, sku]
+            properties:
+              name: { type: string }
+              sku: { type: string }
+              stock: { type: integer }
+              options: { type: object }
+        prices:
+          type: array
+          items:
+            type: object
+            required: [tierType, price]
+            properties:
+              tierType: { type: string, enum: [retail, reseller] }
+              price: { type: number }
+              sku: { type: string, description: "Opcional. Vincula el precio a una variante específica por SKU" }
+        tags: { type: array, items: { type: string } }
+        categories: { type: array, items: { type: string } }
+
+    AdminUpdateProduct:
+      type: object
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [published, draft, inactive] }
+        description: { type: string }
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, description: "Si se omite, se crea como nueva variante" }
+              name: { type: string }
+              sku: { type: string }
+              stock: { type: integer }
+        prices:
+          type: array
+          items: { $ref: "products.yaml#/components/schemas/PriceTier" }
+        tags: { type: array, items: { type: string } }
+        categories: { type: array, items: { type: string } }

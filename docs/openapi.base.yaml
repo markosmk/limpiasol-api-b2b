@@ -1,0 +1,92 @@
+openapi: 3.1.0
+info:
+  title: Limpiasol B2B API
+  version: 1.0.0
+  description: API para gestión de pedidos B2B y catálogo mayorista.
+  contact:
+    name: Soporte Limpiasol
+    email: soporte@limpiasol.com
+    url: https://limpiasol.com
+
+servers:
+  - url: http://localhost:8080
+    description: Desarrollo
+  - url: https://api.limpiasol.com
+    description: Producción
+
+tags:
+  - name: Products
+    description: Catálogo público de productos y precios.
+  - name: Orders
+    description: Gestión de pedidos para clientes.
+  - name: Auth
+    description: Autenticación y gestión de sesiones.
+  - name: Admin - Products
+    description: Gestión administrativa de catálogo (CRUD completo).
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Sesión de usuario almacenada en cookie httpOnly.
+
+  schemas:
+    # ─────────────────────────────────────
+    # ERRORES (compartido todos los dominios)
+    # ─────────────────────────────────────
+    Error:
+      type: object
+      required: [statusCode, code, message]
+      properties:
+        statusCode: { type: integer, example: 400 }
+        code: { type: string, example: "bad_request" }
+        message: { type: string, example: "Solicitud inválida" }
+        issues: 
+          type: object
+          description: Detalles de validación por campo si aplica.
+          additionalProperties: { type: array, items: { type: string } }
+
+    # ─────────────────────────────────────
+    # DIRECCIONES (orders, users, etc.)
+    # ─────────────────────────────────────
+    Address:
+      type: object
+      required: [fullName, addressLine1, city, province, postalCode, phone]
+      properties:
+        fullName: { type: string, example: "Juan Perez" }
+        addressLine1: { type: string, example: "Av. Siempre Viva 123" }
+        addressLine2: { type: string, example: "Depto 4B", nullable: true }
+        city: { type: string, example: "Ciudad Autónoma de Buenos Aires" }
+        province: { type: string, example: "Buenos Aires" }
+        postalCode: { type: string, pattern: "^\\d{4}$", example: "1425" }
+        phone: { type: string, example: "1122334455" }
+
+    # ─────────────────────────────────────
+    # PAGINACIÓN (compartido)
+    # ─────────────────────────────────────
+    PaginationParams:
+      type: object
+      properties:
+        page: { type: integer, minimum: 1, default: 1, example: 1 }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 }
+
+  responses:
+    401Unauthorized:
+      description: No autenticado. Sesión expirada o inexistente.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    
+    403Forbidden:
+      description: No autorizado. El usuario no tiene el rol necesario.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    
+    500InternalServerError:
+      description: Error interno del servidor.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
