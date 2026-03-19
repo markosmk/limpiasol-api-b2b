@@ -1,27 +1,41 @@
 import path from "node:path"
 import AutoLoad from "@fastify/autoload"
+import closeWithGrace from "close-with-grace"
 import fastify from "fastify"
 import { loggerOptions } from "./utils/logger"
 
 import "./events/listeners/email.listener"
 
-const app = fastify({
-  logger: loggerOptions
-})
+const PORT = parseInt(process.env.PORT ?? "8080", 10)
 
-app.register(AutoLoad, {
-  dir: path.join(__dirname, "plugins")
-})
+async function main() {
+  const app = fastify({
+    logger: loggerOptions
+  })
 
-app.register(AutoLoad, {
-  dir: path.join(__dirname, "domains")
-})
+  app.register(AutoLoad, {
+    dir: path.join(__dirname, "plugins")
+  })
 
-const PORT = parseInt(process.env.PORT ?? "", 10) || 8080
-app.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
-  if (err) {
-    console.error(err)
+  app.register(AutoLoad, {
+    dir: path.join(__dirname, "domains"),
+    scriptPattern: /index\.ts$/,
+    ignorePattern: /.*\.test\.ts$/
+  })
+
+  // Graceful shutdown
+  closeWithGrace({ delay: 500 }, async ({ err }) => {
+    if (err) app.log.error(err)
+    await app.close()
+  })
+
+  try {
+    await app.listen({ port: PORT, host: "0.0.0.0" })
+    app.log.info(`Server running at http://0.0.0.0:${PORT}`)
+  } catch (err) {
+    app.log.error(err)
     process.exit(1)
   }
-  console.log(`Server listening at ${address}`)
-})
+}
+
+main()
