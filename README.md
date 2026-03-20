@@ -66,3 +66,29 @@ Esta combinación asegura que:
 1. Las peticiones frecuentes no sobrecarguen Redis ni MySQL.
 2. El uso de memoria del servidor esté acotado y se limpie automáticamente.
 3. El sistema sea escalable horizontalmente.
+
+### Error: listen EADDRINUSE: address already in use 0.0.0.0:8080
+
+Ocurre porque en desarrollo, el proceso anterior de `Node` no se cierra lo suficientemente rápido (o se queda colgado en memoria) cuando `tsx watch` reinicia la aplicación tras un cambio de archivo. Esto hace que el nuevo proceso intente abrir el mismo puerto mientras el anterior aún lo tiene ocupado.
+
+Se soluciona con `close-with-grace`, cuando `tsx` mata el proceso para reiniciar, la aplicación recibe la señal y ejecuta `await app.close()`. Esto garantiza que Fastify cierre todos los sockets abiertos y libere el puerto 8080 de inmediato, permitiendo que el nuevo proceso inicie sin conflictos.
+
+Si aun persiste el error, se puede cerrar el proceso anterior de `Node` antes de iniciar la aplicación con `tsx watch`.
+
+```bash
+kill -9 $(lsof -ti:8080)
+```
+revisar si hay otras instancias de pnpm run dev ejecutandose en segundo plano. con:
+```bash
+lsof -ti:8080
+```
+
+limpiarlas con
+
+```bash 
+lsof -ti:8080 | xargs kill -9
+
+# o con el pid especifico
+# ej: 12345 es el pid
+kill -9 12345
+```
