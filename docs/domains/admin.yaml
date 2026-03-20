@@ -130,6 +130,264 @@ paths:
         "404":
           description: Producto no encontrado.
 
+  # ─────────────────────────────────────
+  # ADMIN - CATEGORIES
+  # ─────────────────────────────────────
+  /categories/admin:
+    get:
+      summary: Listar todas las categorías
+      description: Retorna todas las categorías con detalle completo. Requiere privilegios de administrador.
+      operationId: adminGetCategories
+      tags: [Admin - Categories]
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      categories:
+                        type: array
+                        items: { $ref: "categories.yaml#/components/schemas/Category" }
+
+    post:
+      summary: Crear categoría
+      description: Crea una nueva categoría en el sistema.
+      operationId: adminCreateCategory
+      tags: [Admin - Categories]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category]
+              properties:
+                category:
+                  type: object
+                  required: [name, slug]
+                  properties:
+                    name: { type: string }
+                    slug: { type: string }
+                    parentId: { type: string, nullable: true }
+                    description: { type: string, nullable: true }
+                    imageUrl: { type: string, nullable: true }
+      responses:
+        "201":
+          description: Categoría creada.
+
+  /categories/admin/{categoryId}:
+    get:
+      summary: Ver detalle de categoría
+      operationId: adminGetCategoryDetail
+      tags: [Admin - Categories]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: object, properties: { category: { $ref: "categories.yaml#/components/schemas/Category" } } }
+
+    put:
+      summary: Actualizar categoría
+      operationId: adminUpdateCategory
+      tags: [Admin - Categories]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    slug: { type: string }
+                    parentId: { type: string, nullable: true }
+                    description: { type: string, nullable: true }
+                    imageUrl: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Actualizado.
+
+    delete:
+      summary: Eliminar categoría
+      operationId: adminDeleteCategory
+      tags: [Admin - Categories]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Eliminado.
+
+  /categories/admin/bulk-assign:
+    post:
+      summary: Asignación masiva de categorías a productos
+      description: Asocia un conjunto de productos a uno o más categorías de forma masiva. Actualiza si ya existen.
+      operationId: adminBulkAssignCategories
+      tags: [Admin - Categories]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productIds, categoryIds]
+              properties:
+                productIds:
+                  type: array
+                  items: { type: string }
+                categoryIds:
+                  type: array
+                  items: { type: string }
+                isPrimary:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Asignación completada con éxito.
+
+  # ─────────────────────────────────────
+  # ADMIN - COLLECTIONS
+  # ─────────────────────────────────────
+  /collections/admin:
+    get:
+      summary: Listar todas las colecciones
+      operationId: adminGetCollections
+      tags: [Admin - Collections]
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      collections:
+                        type: array
+                        items: { $ref: "collections.yaml#/components/schemas/Collection" }
+
+    post:
+      operationId: adminCreateCollection
+      tags: [Admin - Collections]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [collection]
+              properties:
+                collection:
+                  type: object
+                  required: [name, slug]
+                  properties:
+                    name: { type: string }
+                    slug: { type: string }
+                    description: { type: string, nullable: true }
+                    imageUrl: { type: string, nullable: true }
+                    isActive: { type: boolean, default: true }
+                    isFeatured: { type: boolean, default: false }
+      responses:
+        "201":
+          description: Colección creada.
+
+  /collections/admin/{collectionId}:
+    put:
+      operationId: adminUpdateCollection
+      tags: [Admin - Collections]
+      parameters:
+        - name: collectionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                collection:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    slug: { type: string }
+                    isActive: { type: boolean }
+      responses:
+        "200":
+          description: Colección actualizada.
+
+    delete:
+      operationId: adminDeleteCollection
+      tags: [Admin - Collections]
+      parameters:
+        - name: collectionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Colección eliminada.
+
+  /collections/admin/bulk-assign:
+    post:
+      summary: Asignación masiva a colecciones
+      operationId: adminBulkAssignCollections
+      tags: [Admin - Collections]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productIds, collectionIds]
+              properties:
+                productIds:
+                  type: array
+                  items: { type: string }
+                collectionIds:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: OK.
+
 components:
   schemas:
     AdminCreateProduct:

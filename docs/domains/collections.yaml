@@ -1,0 +1,68 @@
+paths:
+  /collections:
+    get:
+      summary: Listar colecciones activas
+      description: Retorna una lista de colecciones destacadas y activas para el catálogo frontend.
+      operationId: getCollections
+      tags: [Collections]
+      responses:
+        "200":
+          description: Lista de colecciones.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      collections:
+                        type: array
+                        items: { $ref: "#/components/schemas/CollectionPublic" }
+
+  /collections/slug/{slug}:
+    get:
+      summary: Obtener colección por Slug
+      description: Retorna el detalle de una colección específica por su slug.
+      operationId: getCollectionBySlug
+      tags: [Collections]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detalle de la colección.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      collection: { $ref: "#/components/schemas/Collection" }
+        "404":
+          description: Colección no encontrada.
+
+components:
+  schemas:
+    CollectionPublic:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        imageUrl: { type: string, nullable: true }
+        isFeatured: { type: boolean }
+
+    Collection:
+      allOf:
+        - $ref: "#/components/schemas/CollectionPublic"
+        - type: object
+          properties:
+            description: { type: string, nullable: true }
+            isActive: { type: boolean }

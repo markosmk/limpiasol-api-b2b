@@ -17,12 +17,20 @@ servers:
 tags:
   - name: Products
     description: Catálogo público de productos y precios.
+  - name: Categories
+    description: Exploración de categorías de productos.
+  - name: Collections
+    description: Colecciones destacadas y agrupaciones de productos.
   - name: Orders
     description: Gestión de pedidos para clientes.
   - name: Auth
     description: Autenticación y gestión de sesiones.
   - name: Admin - Products
     description: Gestión administrativa de catálogo (CRUD completo).
+  - name: Admin - Categories
+    description: Gestión de categorías del catálogo.
+  - name: Admin - Collections
+    description: Gestión de colecciones y agrupaciones.
 
 components:
   securitySchemes:

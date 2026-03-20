@@ -156,6 +156,56 @@ components:
             type: object
           type: array
       type: object
+    Category:
+      allOf:
+        - $ref: '#/components/schemas/CategoryPublic'
+        - properties:
+            createdAt:
+              format: date-time
+              type: string
+            description:
+              nullable: true
+              type: string
+          type: object
+    CategoryPublic:
+      properties:
+        id:
+          type: string
+        imageUrl:
+          nullable: true
+          type: string
+        name:
+          type: string
+        parentId:
+          nullable: true
+          type: string
+        slug:
+          type: string
+      type: object
+    Collection:
+      allOf:
+        - $ref: '#/components/schemas/CollectionPublic'
+        - properties:
+            description:
+              nullable: true
+              type: string
+            isActive:
+              type: boolean
+          type: object
+    CollectionPublic:
+      properties:
+        id:
+          type: string
+        imageUrl:
+          nullable: true
+          type: string
+        isFeatured:
+          type: boolean
+        name:
+          type: string
+        slug:
+          type: string
+      type: object
     DeliveryType:
       enum:
         - shipping
@@ -528,6 +578,435 @@ paths:
       summary: Restablecer contraseña con token
       tags:
         - Auth
+  /categories:
+    get:
+      description: Retorna una lista de categorías con información reducida para el
+        catálogo frontend.
+      operationId: getCategories
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      categories:
+                        items:
+                          $ref: '#/components/schemas/CategoryPublic'
+                        type: array
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Lista de categorías obtenida con éxito.
+      summary: Listar categorías públicas
+      tags:
+        - Categories
+  /categories/admin:
+    get:
+      description: Retorna todas las categorías con detalle completo. Requiere
+        privilegios de administrador.
+      operationId: adminGetCategories
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      categories:
+                        items:
+                          $ref: '#/components/schemas/Category'
+                        type: array
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: OK
+      security:
+        - cookieAuth: []
+      summary: Listar todas las categorías
+      tags:
+        - Admin - Categories
+    post:
+      description: Crea una nueva categoría en el sistema.
+      operationId: adminCreateCategory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                category:
+                  properties:
+                    description:
+                      nullable: true
+                      type: string
+                    imageUrl:
+                      nullable: true
+                      type: string
+                    name:
+                      type: string
+                    parentId:
+                      nullable: true
+                      type: string
+                    slug:
+                      type: string
+                  required:
+                    - name
+                    - slug
+                  type: object
+              required:
+                - category
+              type: object
+        required: true
+      responses:
+        '201':
+          description: Categoría creada.
+      security:
+        - cookieAuth: []
+      summary: Crear categoría
+      tags:
+        - Admin - Categories
+  /categories/admin/bulk-assign:
+    post:
+      description: Asocia un conjunto de productos a uno o más categorías de forma
+        masiva. Actualiza si ya existen.
+      operationId: adminBulkAssignCategories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                categoryIds:
+                  items:
+                    type: string
+                  type: array
+                isPrimary:
+                  default: false
+                  type: boolean
+                productIds:
+                  items:
+                    type: string
+                  type: array
+              required:
+                - productIds
+                - categoryIds
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Asignación completada con éxito.
+      security:
+        - cookieAuth: []
+      summary: Asignación masiva de categorías a productos
+      tags:
+        - Admin - Categories
+  /categories/admin/{categoryId}:
+    delete:
+      operationId: adminDeleteCategory
+      parameters:
+        - in: path
+          name: categoryId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Eliminado.
+      security:
+        - cookieAuth: []
+      summary: Eliminar categoría
+      tags:
+        - Admin - Categories
+    get:
+      operationId: adminGetCategoryDetail
+      parameters:
+        - in: path
+          name: categoryId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      category:
+                        $ref: '#/components/schemas/Category'
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: OK
+      security:
+        - cookieAuth: []
+      summary: Ver detalle de categoría
+      tags:
+        - Admin - Categories
+    put:
+      operationId: adminUpdateCategory
+      parameters:
+        - in: path
+          name: categoryId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                category:
+                  properties:
+                    description:
+                      nullable: true
+                      type: string
+                    imageUrl:
+                      nullable: true
+                      type: string
+                    name:
+                      type: string
+                    parentId:
+                      nullable: true
+                      type: string
+                    slug:
+                      type: string
+                  type: object
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Actualizado.
+      security:
+        - cookieAuth: []
+      summary: Actualizar categoría
+      tags:
+        - Admin - Categories
+  /categories/{slug}:
+    get:
+      description: Retorna el detalle de una categoría específica buscando por su slug.
+      operationId: getCategoryBySlug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      category:
+                        $ref: '#/components/schemas/Category'
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Detalle de la categoría.
+        '404':
+          description: Categoría no encontrada.
+      summary: Obtener categoría por Slug
+      tags:
+        - Categories
+  /collections:
+    get:
+      description: Retorna una lista de colecciones destacadas y activas para el
+        catálogo frontend.
+      operationId: getCollections
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      collections:
+                        items:
+                          $ref: '#/components/schemas/CollectionPublic'
+                        type: array
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Lista de colecciones.
+      summary: Listar colecciones activas
+      tags:
+        - Collections
+  /collections/admin:
+    get:
+      operationId: adminGetCollections
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      collections:
+                        items:
+                          $ref: '#/components/schemas/Collection'
+                        type: array
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: OK
+      security:
+        - cookieAuth: []
+      summary: Listar todas las colecciones
+      tags:
+        - Admin - Collections
+    post:
+      operationId: adminCreateCollection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                collection:
+                  properties:
+                    description:
+                      nullable: true
+                      type: string
+                    imageUrl:
+                      nullable: true
+                      type: string
+                    isActive:
+                      default: true
+                      type: boolean
+                    isFeatured:
+                      default: false
+                      type: boolean
+                    name:
+                      type: string
+                    slug:
+                      type: string
+                  required:
+                    - name
+                    - slug
+                  type: object
+              required:
+                - collection
+              type: object
+        required: true
+      responses:
+        '201':
+          description: Colección creada.
+      tags:
+        - Admin - Collections
+  /collections/admin/bulk-assign:
+    post:
+      operationId: adminBulkAssignCollections
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                collectionIds:
+                  items:
+                    type: string
+                  type: array
+                productIds:
+                  items:
+                    type: string
+                  type: array
+              required:
+                - productIds
+                - collectionIds
+              type: object
+        required: true
+      responses:
+        '200':
+          description: OK.
+      security:
+        - cookieAuth: []
+      summary: Asignación masiva a colecciones
+      tags:
+        - Admin - Collections
+  /collections/admin/{collectionId}:
+    delete:
+      operationId: adminDeleteCollection
+      parameters:
+        - in: path
+          name: collectionId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Colección eliminada.
+      tags:
+        - Admin - Collections
+    put:
+      operationId: adminUpdateCollection
+      parameters:
+        - in: path
+          name: collectionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                collection:
+                  properties:
+                    isActive:
+                      type: boolean
+                    name:
+                      type: string
+                    slug:
+                      type: string
+                  type: object
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Colección actualizada.
+      tags:
+        - Admin - Collections
+  /collections/slug/{slug}:
+    get:
+      description: Retorna el detalle de una colección específica por su slug.
+      operationId: getCollectionBySlug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      collection:
+                        $ref: '#/components/schemas/Collection'
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Detalle de la colección.
+        '404':
+          description: Colección no encontrada.
+      summary: Obtener colección por Slug
+      tags:
+        - Collections
   /orders:
     get:
       description: Retorna el historial de pedidos del usuario autenticado, ordenados
@@ -1035,9 +1514,17 @@ servers:
 tags:
   - description: Catálogo público de productos y precios.
     name: Products
+  - description: Exploración de categorías de productos.
+    name: Categories
+  - description: Colecciones destacadas y agrupaciones de productos.
+    name: Collections
   - description: Gestión de pedidos para clientes.
     name: Orders
   - description: Autenticación y gestión de sesiones.
     name: Auth
   - description: Gestión administrativa de catálogo (CRUD completo).
     name: Admin - Products
+  - description: Gestión de categorías del catálogo.
+    name: Admin - Categories
+  - description: Gestión de colecciones y agrupaciones.
+    name: Admin - Collections

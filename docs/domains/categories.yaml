@@ -1,0 +1,68 @@
+paths:
+  /categories:
+    get:
+      summary: Listar categorías públicas
+      description: Retorna una lista de categorías con información reducida para el catálogo frontend.
+      operationId: getCategories
+      tags: [Categories]
+      responses:
+        "200":
+          description: Lista de categorías obtenida con éxito.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      categories:
+                        type: array
+                        items: { $ref: "#/components/schemas/CategoryPublic" }
+
+  /categories/{slug}:
+    get:
+      summary: Obtener categoría por Slug
+      description: Retorna el detalle de una categoría específica buscando por su slug.
+      operationId: getCategoryBySlug
+      tags: [Categories]
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detalle de la categoría.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      category: { $ref: "#/components/schemas/Category" }
+        "404":
+          description: Categoría no encontrada.
+
+components:
+  schemas:
+    CategoryPublic:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        parentId: { type: string, nullable: true }
+        imageUrl: { type: string, nullable: true }
+
+    Category:
+      allOf:
+        - $ref: "#/components/schemas/CategoryPublic"
+        - type: object
+          properties:
+            description: { type: string, nullable: true }
+            createdAt: { type: string, format: date-time }
