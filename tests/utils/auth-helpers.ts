@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm"
 import { db } from "@/db"
 import { users } from "@/db/schema"
 import { authService } from "@/domains/auth/auth.service"
-import { hashPassword } from "@/utils/auth/hash"
 
 export type TestUserContext = {
   user: { id: string }
@@ -21,7 +20,8 @@ export async function createTestUserAndSession(
     .insert(users)
     .values({
       email,
-      passwordHash: await hashPassword("password123"),
+      // no testing login here, just create user and session
+      passwordHash: "mocked_hash_for_testing_speed",
       role: role,
       status: "active",
       emailVerified: true,
