@@ -1,10 +1,10 @@
 import { and, eq, isNull } from "drizzle-orm"
-import type { PricingContext } from "./products.pricing.types"
+import type { PricingContext } from "./pricing.types"
 
 import { db } from "@/db"
 import { priceTiers } from "@/db/schema/products"
 
-export const productsPricingRepository = {
+export class ProductsPricingRepository {
   /**
    * Busca el tier de precio para un producto/variante + tipo de usuario
    * Prioriza: variante específica > producto base (variantId = NULL)
@@ -39,7 +39,7 @@ export const productsPricingRepository = {
       )
 
     return tier || null
-  },
+  }
 
   /**
    * Fallback a precio retail si no encuentra el tier del usuario
@@ -57,7 +57,7 @@ export const productsPricingRepository = {
       )
 
     return tier || null
-  },
+  }
 
   /**
    * Obtiene todos los tiers de precio para un producto/variante
@@ -72,7 +72,7 @@ export const productsPricingRepository = {
           variantId ? eq(priceTiers.variantId, variantId) : isNull(priceTiers.variantId)
         )
       )
-  },
+  }
 
   /**
    * Obtiene todas las opciones de precio disponibles para un producto
@@ -90,3 +90,5 @@ export const productsPricingRepository = {
       )
   }
 }
+
+export const productsPricingRepository = new ProductsPricingRepository()

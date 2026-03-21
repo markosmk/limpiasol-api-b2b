@@ -1,6 +1,6 @@
-import { applyVolumeDiscount, validatePurchaseRules } from "./lib/pricing.utils"
-import { productsPricingRepository } from "./products.pricing.repository"
-import { productsRepository } from "./products.repository"
+import { applyVolumeDiscount, validatePurchaseRules } from "../lib/pricing.utils"
+import { type ProductsRepository, productsRepository } from "../products.repository"
+import { type ProductsPricingRepository, productsPricingRepository } from "./pricing.repository"
 import type { PriceTier } from "@/db/schema"
 import type { PurchaseRule } from "@/db/schema/products.types"
 import type {
@@ -8,25 +8,26 @@ import type {
   PricingContext,
   PricingResult,
   UserTier
-} from "./products.pricing.types"
+} from "./pricing.types"
 
 import { AppError } from "@/utils/app-error"
 
-export const productsPricingService = {
+export class ProductsPricingService {
+  constructor(
+    private readonly repository: ProductsPricingRepository,
+    private readonly productsRepo: ProductsRepository
+  ) {}
   /**
    * Calcula el precio final para un usuario según su tier, cantidad y variante
    */
   async calculatePrice(ctx: PricingContext): Promise<PricingResult> {
-    // TODO: better
+    // TODO: better performance one query
     // const tiers = await productsPricingRepository.findPriceTiersForProduct(productId, variantId)
     // const tier = tiers.find(t => t.tierType === userTier) || tiers.find(t => t.tierType === "retail")
 
-    const tier = await productsPricingRepository.findPriceTier(ctx)
+    const tier = await this.repository.findPriceTier(ctx)
     if (!tier) {
-      const fallback = await productsPricingRepository.findFallbackRetailPrice(
-        ctx.productId,
-        ctx.variantId
-      )
+      const fallback = await this.repository.findFallbackRetailPrice(ctx.productId, ctx.variantId)
       if (!fallback) {
         throw new AppError({
           code: "price_not_found",
@@ -37,7 +38,7 @@ export const productsPricingService = {
       return this._buildPricingResult(fallback, ctx.quantity, "retail")
     }
     return this._buildPricingResult(tier, ctx.quantity, ctx.userTier)
-  },
+  }
 
   /**
    * Valida si una cantidad cumple las reglas de compra del producto
@@ -54,7 +55,7 @@ export const productsPricingService = {
     // - Ej: Variante "Mayorista" podría tener minQuantity: 50, mientras el producto base tiene 10
 
     // 1. Buscar producto con sus reglas (solo activos para rutas públicas)
-    const product = await productsRepository.findProductById(productId)
+    const product = await this.productsRepo.findProductById(productId)
     if (!product) {
       return {
         valid: false,
@@ -81,14 +82,14 @@ export const productsPricingService = {
     const purchaseRules = rules || defaultRules
 
     return validatePurchaseRules(quantity, purchaseRules)
-  },
+  }
 
   /**
    * Obtiene todas las opciones de precio para mostrar en UI
    * (ej: "Precio lista: $100 | Mayorista: $75 | Revendedor: $60")
    */
   async getPriceOptions(productId: string, variantId?: string | null) {
-    const tiers = await productsPricingRepository.getAllPriceOptions(productId, variantId)
+    const tiers = await this.repository.getAllPriceOptions(productId, variantId)
 
     return tiers.map((tier) => ({
       tierType: tier.tierType,
@@ -102,15 +103,15 @@ export const productsPricingService = {
           }>
         | undefined
     }))
-  },
+  }
 
   /**
    * Obtiene el precio base para mostrar en catálogo/detalle
    * Usa minQuantity o 1, según lo que tenga sentido para el producto
    */
   async getDisplayPrice(productId: string, variantId?: string | null, userTier?: string) {
-    // TODO: repository only get basic info and purchaseRules
-    const product = await productsRepository.findProductById(productId)
+    // TODO: create repository only get basic info and purchaseRules
+    const product = await this.productsRepo.findProductById(productId)
     const rules = product?.purchaseRules as PurchaseRule
     const quantity = rules?.minQuantity || 1
 
@@ -120,7 +121,7 @@ export const productsPricingService = {
       userTier: (userTier as UserTier) || "retail",
       quantity
     })
-  },
+  }
 
   /**
    * Método privado: construye el resultado de pricing
@@ -153,3 +154,8 @@ export const productsPricingService = {
     }
   }
 }
+
+export const productsPricingService = new ProductsPricingService(
+  productsPricingRepository,
+  productsRepository
+)
