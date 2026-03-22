@@ -6,6 +6,7 @@ import { db, setupTestDB, teardownTestDB } from "#test/utils/test-db"
 import type { FastifyInstance } from "fastify"
 
 import { priceTiers, products, productVariants } from "@/db/schema"
+import productsRoutes from "@/domains/products/products.routes"
 
 async function cleanPricingTables() {
   await db.delete(priceTiers).execute()
@@ -21,7 +22,7 @@ describe("POST /products/:productId/price", () => {
 
   beforeAll(async () => {
     await setupTestDB()
-    app = await createTestApp()
+    app = await createTestApp(productsRoutes, "/products")
     await app.ready()
   })
 
@@ -403,7 +404,7 @@ describe("POST /products/admin", () => {
 
   beforeAll(async () => {
     await setupTestDB()
-    app = await createTestApp()
+    app = await createTestApp(productsRoutes, "/products")
     await app.ready()
   })
 

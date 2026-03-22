@@ -16,6 +16,11 @@ async function setupTestDB() {
   return db
 }
 
+/**
+ * TODO: add domains, orders, users, collections, tags, in correct order to clean up
+ *
+ * config vitest: `fileParallelism: false`
+ */
 async function teardownTestDB() {
   if (!connection) return
 
@@ -27,6 +32,7 @@ async function teardownTestDB() {
   await connection.end()
 }
 
+// not use on routes tests because the tests use fastify cookies
 async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
   await db.execute("START TRANSACTION")
   try {

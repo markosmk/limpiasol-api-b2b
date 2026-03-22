@@ -1,9 +1,10 @@
 import cookie from "@fastify/cookie"
-import Fastify, { type FastifyInstance } from "fastify"
+import Fastify, { type FastifyInstance, type FastifyPluginAsync } from "fastify"
 
-import productsRoutes from "@/domains/products/products.routes"
-
-export async function createTestApp(): Promise<FastifyInstance> {
+export async function createTestApp(
+  routerPlugin?: FastifyPluginAsync,
+  prefix: string = "/"
+): Promise<FastifyInstance> {
   const app = Fastify({ logger: false })
 
   // register plugins as used in production
@@ -11,8 +12,9 @@ export async function createTestApp(): Promise<FastifyInstance> {
   await app.register(import("@fastify/sensible"))
   await app.register(import("@fastify/cors"), { origin: "*" })
 
-  // register routes with prefix for tests
-  await app.register(productsRoutes, { prefix: "/products" })
+  if (routerPlugin) {
+    await app.register(routerPlugin, { prefix })
+  }
 
   // Hook to close DB on finish
   app.addHook("onClose", async () => {
