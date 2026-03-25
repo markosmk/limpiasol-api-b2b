@@ -4,6 +4,7 @@ export const appEvents = new EventEmitter()
 
 export const EventTypes = {
   USER_REGISTERED: "user.registered",
-  ORDER_CREATED: "order.created",
-  PASSWORD_RESET_REQUESTED: "password.reset_requested"
+  PASSWORD_RESET_REQUESTED: "password.reset_requested",
+  USER_WELCOME: "user.welcome"
+  // ORDER_CREATED: "order.created",
 } as const
