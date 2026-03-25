@@ -147,6 +147,16 @@ export const authService = {
     await authRepository.verifyUserEmail(vt.userId)
     await authRepository.deleteVerificationToken(tokenHash)
 
+    const user = await authRepository.findUserById(vt.userId)
+    if (!user) {
+      throw new AppError({ code: "user_not_found" })
+    }
+
+    appEvents.emit(EventTypes.USER_WELCOME, {
+      email: user.email,
+      name: user.name
+    })
+
     return { success: true }
   },
 
