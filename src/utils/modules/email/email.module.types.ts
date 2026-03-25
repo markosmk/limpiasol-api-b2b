@@ -7,9 +7,6 @@ export type EmailModuleConfig = {
    * Proveedor de email
    */
   provider: "brevo" | "resend" | "smtp" | null
-  /**
-   * Credenciales de email
-   */
   credentials: {
     /**
      * API Key encriptada
@@ -19,21 +16,45 @@ export type EmailModuleConfig = {
      * API Secret encriptada
      */
     apiSecretEncrypted?: string
-    /**
-     * Nombre del remitente
-     */
     fromName: string
-    /**
-     * Email del remitente
-     */
     fromEmail: string
   }
   /**
    * Plantillas de email
    */
-  templates?: {
-    orderCreated?: string
-    orderPaid?: string
-    orderShipped?: string
-  }
+  templates?: Record<TemplateKey, string>
+  /**
+   * IDs de plantillas de Brevo (usualmente son números)
+   */
+  templateIds?: Record<TemplateKey, string>
+}
+
+export type TemplateKey =
+  // Orders
+  | "orderCreated"
+  | "orderPendingPayment"
+  | "orderPaid"
+  | "orderDispatched"
+  | "orderCancelled"
+  // Auth
+  | "userRegistered"
+  | "passwordReset"
+  | "welcome"
+
+export interface SendEmailOptions {
+  to: string | string[]
+  // Sender
+  sender?: { name: string; email: string }
+  // Option: HTML
+  subject?: string
+  htmlContent?: string
+  // Option: Provider Template (Brevo, number)
+  templateId?: string
+  params?: Record<string, unknown>
+  // aditional
+  apiKey?: string
+}
+
+export interface EmailProvider {
+  sendEmail(options: SendEmailOptions): Promise<void>
 }

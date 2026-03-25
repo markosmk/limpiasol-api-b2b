@@ -1,16 +1,15 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: <explanation > */
 
 import { BaseModule } from "../base.module"
-import type { EmailModuleConfig } from "./email.module.types"
+import { type EmailService, emailService } from "./email.module.service"
+import type { EmailModuleConfig, TemplateKey } from "./email.module.types"
 
 import { decryptFromBase64 } from "@/utils/crypto"
-import { emailService } from "@/utils/email/email.service"
 
 export class EmailModule extends BaseModule<EmailModuleConfig> {
-  constructor() {
+  constructor(private readonly emailService: EmailService) {
     super("email")
   }
-
   /**
    * Obtiene la API key desencriptada
    * Retorna null si no está configurada
@@ -35,6 +34,8 @@ export class EmailModule extends BaseModule<EmailModuleConfig> {
     to: string
     subject: string
     htmlContent: string
+    apiKey?: string
+    providerType?: string
   }): Promise<{ success: boolean; error?: string }> {
     await this.ensureInitialized()
 
@@ -42,21 +43,23 @@ export class EmailModule extends BaseModule<EmailModuleConfig> {
       return { success: false, error: "Módulo de email no habilitado" }
     }
 
-    const apiKey = this.getApiKey()
-    if (!apiKey) {
-      return { success: false, error: "API key not configured" }
-    }
-
-    // Usar apiKey para enviar email...
-    if (this.config?.provider === "brevo") {
-      // await brevoClient.send({ apiKey, ...params })
-      // TODO: use apikey
-      console.log("[Brevo] Sending email with key:", `${apiKey.slice(0, 8)}...`)
-    }
+    const apiKey = params.apiKey ?? this.getApiKey() ?? undefined
+    const providerType = params.providerType ?? this.config?.provider ?? "console"
+    const sender = this.config?.credentials
+      ? {
+          name: this.config.credentials.fromName,
+          email: this.config.credentials.fromEmail
+        }
+      : undefined
 
     try {
       // Tu EmailService ya decide qué adapter usar (Brevo vs Console)
-      await emailService.sendEmail(params)
+      await this.emailService.sendEmail({
+        ...params,
+        apiKey,
+        providerType,
+        sender
+      })
       return { success: true }
     } catch (error) {
       console.error("[emailModule] Send failed:", error)
@@ -66,44 +69,167 @@ export class EmailModule extends BaseModule<EmailModuleConfig> {
       }
     }
   }
+  /**
+   * Compilador ultra rápido para plantillas HTML personalizadas de la BD
+   * Reemplaza {{ variable }} por su valor en params
+   */
+  private compileHtml(template: string, params: Record<string, any>): string {
+    return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => {
+      return params[key] !== undefined ? String(params[key]) : ""
+    })
+  }
 
   /**
    * Envío transaccional con templates predefinidos
    */
   async sendTransactionalEmail(params: {
-    to: string
-    templateKey: "order_created" | "order_paid" | "order_shipped" | "order_cancelled"
+    to: string | string[]
+    templateKey: TemplateKey
     templateParams: Record<string, any>
   }): Promise<{ success: boolean; error?: string }> {
-    const templates: Record<string, (p: any) => string> = {
-      order_created: (p) =>
-        `<h2>¡Gracias por tu pedido! 🎉</h2><p>Pedido #${p.orderCode}</p><p>Total: $${p.total}</p>`,
-      order_paid: (p) =>
-        `<h2>¡Pago confirmado! ✅</h2><p>Pedido #${p.orderCode} en preparación</p>`,
-      order_shipped: (p) =>
-        `<h2>¡Tu pedido fue enviado! 📦</h2><p>Tracking: ${p.trackingNumber}</p>`,
-      order_cancelled: (p) =>
-        `<h2>Pedido cancelado</h2><p>Pedido #${p.orderCode}</p>${p.reason ? `<p>Motivo: ${p.reason}</p>` : ""}`
+    await this.ensureInitialized()
+
+    if (!this.enabled && process.env.NODE_ENV !== "development") {
+      return { success: false, error: "Módulo desactivado" }
     }
 
-    const htmlContent = templates[params.templateKey]?.(params.templateParams)
-    if (!htmlContent) {
-      return { success: false, error: `Template "${params.templateKey}" no encontrado` }
+    const { to, templateKey, templateParams } = params
+    const apiKey = this.getApiKey() ?? undefined
+    const provider = this.config?.provider || "console"
+
+    // Obtenemos el remitente configurado en la BD
+    const sender = this.config?.credentials
+      ? {
+          name: this.config.credentials.fromName,
+          email: this.config.credentials.fromEmail
+        }
+      : undefined
+
+    try {
+      // NIVEL 1: ¿Existe un Template ID en Brevo?
+      if (provider === "brevo" && this.config?.templateIds?.[templateKey]) {
+        await this.emailService.sendEmail({
+          to,
+          sender,
+          templateId: this.config.templateIds[templateKey],
+          params: templateParams, // Brevo inyectará estas variables en su plataforma
+          apiKey
+        })
+        return { success: true }
+      }
+
+      const subjects: Record<TemplateKey, string> = {
+        orderCreated: `Solicitud de Pedido #${params.templateParams.orderCode} recibida`,
+        orderPendingPayment: `Pedido #${params.templateParams.orderCode} - Listo para pago`,
+        orderPaid: `Pago Confirmado - Pedido #${params.templateParams.orderCode}`,
+        orderDispatched: `Actualización de Pedido #${params.templateParams.orderCode}`,
+        orderCancelled: `Pedido Cancelado - #${params.templateParams.orderCode}`,
+        userRegistered: "¡Bienvenido!",
+        passwordReset: "Restablecimiento de contraseña",
+        welcome: "¡Bienvenido!"
+      }
+      let htmlContent = ""
+      // NIVEL 2: ¿Existe un HTML Custom en la BD?
+      if (this.config?.templates?.[templateKey]) {
+        htmlContent = this.compileHtml(this.config.templates[templateKey], templateParams)
+      }
+      // NIVEL 3: Fallback (El HTML por defecto del sistema)
+      else {
+        htmlContent = this.getDefaultFallbackHtml(templateKey, templateParams)
+      }
+
+      // Enviar usando HTML (Niveles 2 y 3)
+      await this.emailService.sendEmail({
+        to,
+        sender,
+        subject: subjects[templateKey],
+        htmlContent,
+        apiKey
+      })
+      return { success: true }
+    } catch (error) {
+      console.error(`[EmailModule] Error enviando email (${templateKey}):`, error)
+      return { success: false, error: "Fallo interno al enviar correo" }
+    }
+  }
+
+  /**
+   * Fallback de plantillas (Código duro si el admin no configuró nada)
+   */
+  private getDefaultFallbackHtml(key: TemplateKey, p: Record<string, any>): string {
+    const fallbacks: Record<TemplateKey, (p: any) => string> = {
+      // 1. Creado (Intención de compra)
+      orderCreated: (p) => `
+        <h2>¡Recibimos tu solicitud de pedido!</h2>
+        <p>Hola, hemos registrado tu pedido <strong>#${p.orderCode}</strong> por un total inicial de $${p.total}.</p>
+        <p><em>Importante:</em> Un asesor revisará el stock y los costos de envío. Nos pondremos en contacto a la brevedad o te enviaremos la confirmación final para que puedas realizar el pago.</p>
+        <hr>
+        <p>Revisá el detalle de tu pedido en tu panel de cliente.</p>
+      `,
+      // 2. Esperando Pago (La cotización final)
+      orderPendingPayment: (p) => `
+        <h2>Tu pedido está listo para el pago</h2>
+        <p>Tu pedido <strong>#${p.orderCode}</strong> ya fue revisado y el stock está separado.</p>
+        <p>El total definitivo a abonar es: <strong>$${p.total}</strong>.</p>
+        <br>
+        <h3>Instrucciones de pago:</h3>
+        <p>${p.paymentInstructions || "Por favor, realizá la transferencia al CBU acordado y envianos el comprobante."}</p>
+        ${p.adminNote ? `<p><strong>Nota del vendedor:</strong> ${p.adminNote}</p>` : ""}
+      `,
+      // 3. Pago Confirmado
+      orderPaid: (p) => `
+        <h2>¡Pago confirmado!</h2>
+        <p>Hemos recibido correctamente el pago de tu pedido <strong>#${p.orderCode}</strong>.</p>
+        <p>Ya comenzamos a preparar la mercadería. Te avisaremos cuando esté lista para su entrega.</p>
+      `,
+      // 4. Despachado / Listo para retirar (Dinámico según deliveryType)
+      orderDispatched: (p) => {
+        if (p.deliveryType === "pickup") {
+          return `
+            <h2>¡Tu pedido está listo para retirar!</h2>
+            <p>El pedido <strong>#${p.orderCode}</strong> ya te está esperando.</p>
+            <p><strong>Sucursal:</strong> ${p.pickupLocationName}</p>
+            <p><strong>Dirección:</strong> ${p.pickupAddress}</p>
+          `
+        }
+        return `
+          <h2>¡Tu pedido está en camino!</h2>
+          <p>El pedido <strong>#${p.orderCode}</strong> ya fue despachado.</p>
+          ${p.trackingNumber ? `<p><strong>Seguimiento:</strong> ${p.trackingNumber}</p>` : ""}
+        `
+      },
+
+      // 5. Cancelado
+      orderCancelled: (p) => `
+        <h2>Pedido cancelado</h2>
+        <p>Te informamos que el pedido <strong>#${p.orderCode}</strong> ha sido cancelado.</p>
+        ${p.reason ? `<p><strong>Motivo:</strong> ${p.reason}</p>` : ""}
+        <p>Si creés que esto es un error, por favor contactanos.</p>
+      `,
+
+      // Auth templates
+      userRegistered: (p) => `
+        <h2>¡Bienvenido!</h2>
+        <p>Hola, hemos registrado tu cuenta.</p>
+        <p>Por favor, verifica tu correo electrónico haciendo clic en el siguiente enlace:</p>
+        <a href="${p.verificationUrl}">Verificar correo electrónico</a>
+      `,
+      passwordReset: (p) => `
+        <h2>Restablecimiento de contraseña</h2>
+        <p>Hola, hemos recibido una solicitud para restablecer la contraseña de tu cuenta.</p>
+        <p>Por favor, haz clic en el siguiente enlace para restablecer tu contraseña:</p>
+        <a href="${p.resetUrl}">Restablecer contraseña</a>
+      `,
+      welcome: (p) => `
+        <h2>¡Bienvenido!</h2>
+        <p>Hola ${p.name || ""},</p>
+        <p>¡Bienvenido a Limpiasol! ya puedes iniciar sesión.</p>
+        <a href="${p.siteUrl}">Ir a la plataforma</a>
+      `
     }
 
-    const subjects: Record<string, string> = {
-      order_created: `Pedido #${params.templateParams.orderCode} recibido`,
-      order_paid: `Pedido #${params.templateParams.orderCode} confirmado`,
-      order_shipped: `Pedido #${params.templateParams.orderCode} enviado`,
-      order_cancelled: `Pedido #${params.templateParams.orderCode} cancelado`
-    }
-
-    return this.sendEmail({
-      to: params.to,
-      subject: subjects[params.templateKey] ?? "Actualización de tu pedido",
-      htmlContent
-    })
+    return fallbacks[key]?.(p) || "<p>Actualización de pedido.</p>"
   }
 }
 
-export const emailModule = new EmailModule()
+export const emailModule = new EmailModule(emailService)

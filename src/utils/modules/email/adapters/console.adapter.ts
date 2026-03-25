@@ -1,4 +1,4 @@
-import type { EmailProvider, SendEmailOptions } from "../email-provider.interface"
+import type { EmailProvider, SendEmailOptions } from "../email.module.types"
 
 export class ConsoleEmailAdapter implements EmailProvider {
   async sendEmail(options: SendEmailOptions): Promise<void> {

@@ -12,8 +12,25 @@ export const emailModuleConfigSchema = v.object({
     templates: v.optional(
       v.object({
         orderCreated: v.optional(v.string()),
+        orderPendingPayment: v.optional(v.string()),
         orderPaid: v.optional(v.string()),
-        orderShipped: v.optional(v.string())
+        orderDispatched: v.optional(v.string()),
+        orderCancelled: v.optional(v.string()),
+        userRegistered: v.optional(v.string()),
+        passwordReset: v.optional(v.string()),
+        welcome: v.optional(v.string())
+      })
+    ),
+    templateIds: v.optional(
+      v.object({
+        orderCreated: v.optional(v.string()),
+        orderPendingPayment: v.optional(v.string()),
+        orderPaid: v.optional(v.string()),
+        orderDispatched: v.optional(v.string()),
+        orderCancelled: v.optional(v.string()),
+        userRegistered: v.optional(v.string()),
+        passwordReset: v.optional(v.string()),
+        welcome: v.optional(v.string())
       })
     )
   })
