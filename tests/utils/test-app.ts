@@ -1,6 +1,9 @@
 import cookie from "@fastify/cookie"
 import Fastify, { type FastifyInstance, type FastifyPluginAsync } from "fastify"
 
+import errorHandlerPlugin from "@/plugins/error-handler"
+import valibotPlugin from "@/plugins/valibot"
+
 export async function createTestApp(
   routerPlugin?: FastifyPluginAsync,
   prefix: string = "/"
@@ -10,6 +13,11 @@ export async function createTestApp(
   // register plugins as used in production
   await app.register(cookie)
   await app.register(import("@fastify/sensible"))
+  // register valibot plugin
+  await app.register(valibotPlugin)
+
+  await app.register(errorHandlerPlugin)
+
   await app.register(import("@fastify/cors"), { origin: "*" })
 
   if (routerPlugin) {
@@ -22,18 +30,18 @@ export async function createTestApp(
   })
 
   // Hook to log errors in tests
-  app.setErrorHandler((error, request, reply) => {
-    const err = error as unknown as { statusCode?: number; message?: string }
-    const statusCode = err.statusCode || 500
-    if (statusCode === 500) {
-      request.log.error(error)
-    }
-    reply.code(statusCode).send({
-      success: false,
-      error: err.message,
-      statusCode
-    })
-  })
+  // app.setErrorHandler((error, request, reply) => {
+  //   const err = error as unknown as { statusCode?: number; message?: string }
+  //   const statusCode = err.statusCode || 500
+  //   if (statusCode === 500) {
+  //     request.log.error(error)
+  //   }
+  //   reply.code(statusCode).send({
+  //     success: false,
+  //     error: err.message,
+  //     statusCode
+  //   })
+  // })
 
   return app
 }
