@@ -24,10 +24,22 @@ async function setupTestDB() {
 async function teardownTestDB() {
   if (!connection) return
 
+  const tablesToTruncate = [
+    "settings",
+    "session",
+    "users",
+    "order_timeline",
+    "order_items",
+    "orders",
+    "price_tiers",
+    "product_variants",
+    "products"
+  ]
+
   await connection.execute("SET FOREIGN_KEY_CHECKS = 0")
-  await connection.execute("TRUNCATE TABLE price_tiers")
-  await connection.execute("TRUNCATE TABLE product_variants")
-  await connection.execute("TRUNCATE TABLE products")
+  for (const table of tablesToTruncate) {
+    await connection.execute(`TRUNCATE TABLE ${table}`)
+  }
   await connection.execute("SET FOREIGN_KEY_CHECKS = 1")
   await connection.end()
 }
