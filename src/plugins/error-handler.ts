@@ -14,38 +14,48 @@ type GlobalError = {
   validation?: IssuesValibot
   // ej: "params", "body", "query"
   validationContext?: string
+  issues?: IssuesValibot
 }
+
+/** return nested issues with custom messages for undefined keys */
+function parserValibotIssues(issues: IssuesValibot) {
+  const flatIssues = flatten(issues)
+  const formattedIssues = flatIssues.nested
+
+  if (!formattedIssues) return formattedIssues
+
+  for (const key in formattedIssues) {
+    const messages = formattedIssues[key]
+    if (!messages || messages.length === 0) continue
+    const firstMessage = messages[0]
+    if (firstMessage?.includes("but received undefined") && firstMessage?.includes("Invalid key")) {
+      const fieldName = key.split(".").pop()
+      messages[0] = `El campo '${fieldName}' es obligatorio.`
+    }
+  }
+
+  return formattedIssues
+}
+
 const errorHandlerPlugin: FastifyPluginAsync = async (app) => {
   app.setErrorHandler((error, request, reply) => {
     // extract info safely
     const err = error as GlobalError
     const name = err.name
 
-    // Valibot validation errors (intercepted by Fastify)
-    if (err.code === "FST_ERR_VALIDATION" && err.validation?.length) {
-      const valibotIssues = err.validation
-      const flatIssues = flatten(valibotIssues)
-
-      return reply.status(400).send({
-        statusCode: 400,
-        code: "validation_error",
-        message: "Los datos enviados no son válidos",
-        issues: flatIssues.nested
-        // error: Object.values(flatIssues.nested || {})[0]?.[0] ?? "Validación fallida"
-      })
-    }
-
-    // valibot: errors of validation data
-    if (name === "ValiError") {
-      // casting safely
-      const flatIssues = flatten((error as { issues?: IssuesValibot }).issues as IssuesValibot)
-
-      return reply.status(400).send({
-        statusCode: 400,
-        code: "validation_error",
-        message: "Los datos enviados no son válidos",
-        issues: flatIssues.nested
-      })
+    // 1. Errores de Validación (Fastify Plugin o Valibot directo)
+    if (err.code === "FST_ERR_VALIDATION" || name === "ValiError") {
+      // Fastify guarda los issues en 'validation', v.parse los guarda en 'issues'
+      const rawIssues = err.validation || err.issues
+      if (rawIssues) {
+        const flatIssues = parserValibotIssues(rawIssues as IssuesValibot)
+        return reply.status(400).send({
+          statusCode: 400,
+          code: "VALIDATION_ERROR",
+          message: "Los datos enviados no son válidos",
+          issues: flatIssues
+        })
+      }
     }
 
     // custom errors
