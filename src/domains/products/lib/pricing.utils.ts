@@ -1,5 +1,5 @@
 import type { PurchaseRule } from "@/db/schema/products.types"
-import type { PriceValidationResult } from "../products.pricing.types"
+import type { PriceValidationResult } from "../pricing/pricing.types"
 
 export type PricingTier = "retail" | "wholesale" | "reseller" | "vip"
 
