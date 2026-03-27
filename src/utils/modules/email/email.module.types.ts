@@ -22,11 +22,11 @@ export type EmailModuleConfig = {
   /**
    * Plantillas de email
    */
-  templates?: Record<TemplateKey, string>
+  templates?: Record<string, string>
   /**
    * IDs de plantillas de Brevo (usualmente son números)
    */
-  templateIds?: Record<TemplateKey, string>
+  templateIds?: Record<string, string>
 }
 
 export type TemplateKey =

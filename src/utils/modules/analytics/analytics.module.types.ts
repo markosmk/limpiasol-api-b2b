@@ -15,7 +15,7 @@ export type AnalyticsModuleConfig = {
   /**
    * ID de tracking (GA4, Plausible, etc.)
    */
-  trackingId?: string
+  trackingIdEncrypted?: string
 
   /**
    * Dominio para analytics (opcional)
