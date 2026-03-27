@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull, lt } from "drizzle-orm"
 
 import { type Database, db } from "@/db"
 import { cartItems, carts } from "@/db/schema/carts"
@@ -76,6 +76,25 @@ export class CartsRepository {
       .set({ status: "converted", updatedAt: new Date() })
       .where(eq(carts.id, cartId))
   }
+
+  // TODO: implement on cron job or on user login, or get active cart
+  async cleanupOldCarts(userId: string) {
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    await this.database.delete(carts).where(
+      and(
+        eq(carts.userId, userId),
+        eq(carts.status, "converted"), // ["converted", "abandoned"]
+        lt(carts.updatedAt, thirtyDaysAgo)
+      )
+    )
+  }
+  // ej:
+  // this.cartsRepository.cleanupOldCarts(userId).catch(err => {
+  //     // si falla, no nos importa, no bloqueamos la respuesta al cliente
+  //     console.error(`Error limpiando carritos viejos del user ${userId}:`, err)
+  //   })
 }
 
 export const cartsRepository = new CartsRepository()

@@ -43,6 +43,14 @@ El carrito B2B funciona como una herramienta de inteligencia de negocio. Su esta
 
 ---
 
+## ¿Por qué no borrar el carrito inmediatamente al crear la orden?
+
+Si bien la orden ya tiene sus propios `order_items` con el precio congelado, dejar el carrito vivo como `converted` por un tiempo es útil por tres razones:
+
+- **Trazabilidad (Debugging):** Si un cliente se queja de que "el sistema le cobró mal", se puede comparar el carrito original con la orden final para ver si hubo un desfasaje de precios o un error técnico.
+- **Analítica de Embudo (Funnel):** Se puede medir cuánto tiempo pasa un carrito en `active` antes de pasar a `converted` para entender los tiempos de decisión de los clientes B2B.
+- **Idempotencia:** Si hay una falla de red justo cuando el cliente paga, saber que ese carrito exacto ya está `converted` evita que se le cree dos órdenes iguales si reintenta.
+
 ## Consideraciones para el Frontend
 * **Disclaimer de Precios:** Dado que los precios son dinámicos y se calculan en el servidor, el frontend debe mostrar un texto genérico del tipo: *"Los precios se actualizarán al valor vigente al momento de confirmar el pedido"*.
 * **Estado Espejo:** El frontend (ej. Zustand) debe actuar únicamente como un caché visual de la respuesta del `GET /carts`.
