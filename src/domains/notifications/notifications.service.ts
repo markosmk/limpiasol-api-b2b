@@ -3,7 +3,7 @@ import type { NotificationsSettingsInput, StoreSettingsInput } from "../admin/ad
 import type { OrderNotification } from "./notifications.types"
 
 import { type AdminService, adminService } from "@/domains/admin/admin.service"
-import { emailModule } from "@/utils/modules"
+import { emailModule } from "@/utils/modules/email/email.module"
 
 export class NotificationService {
   constructor(
