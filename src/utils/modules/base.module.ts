@@ -1,5 +1,7 @@
 import { moduleManager } from "./module-manager"
 
+import { appEvents, EventTypes } from "@/events/emitter"
+
 /**
  * Clase base para todos los módulos
  *
@@ -29,7 +31,15 @@ export abstract class BaseModule<TConfig> {
   /**
    * @param moduleName - Nombre del módulo para lookup en DB (ej: "taxes", "shipping")
    */
-  constructor(protected moduleName: string) {}
+  constructor(protected moduleName: string) {
+    // cada módulo se suscribe a sus propias actualizaciones al nacer
+    appEvents.on(EventTypes.MODULE_CONFIG_UPDATED, (updatedModuleName) => {
+      if (this.moduleName === updatedModuleName) {
+        console.log(`[BaseModule] Recargando caché para módulo: ${this.moduleName}`)
+        this.refreshConfig().catch(console.error)
+      }
+    })
+  }
 
   /**
    * Carga la configuración desde DB (solo la primera vez)
