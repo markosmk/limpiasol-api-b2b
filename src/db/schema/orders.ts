@@ -177,3 +177,6 @@ export const orderTimeline = mysqlTable(
     index("timeline_order_created_idx").on(table.orderId, table.createdAt)
   ]
 )
+
+export type OrderTimeline = typeof orderTimeline.$inferSelect
+export type OrderTimelineInsert = typeof orderTimeline.$inferInsert
