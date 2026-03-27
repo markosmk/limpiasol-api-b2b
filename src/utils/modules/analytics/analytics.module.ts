@@ -1,6 +1,9 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: <explanation > */
+
 import { BaseModule } from "../base.module"
 import type { AnalyticsEvent, AnalyticsModuleConfig, TrackResult } from "./analytics.module.types"
+
+import { decryptFromBase64 } from "@/utils/crypto"
 
 /**
  * Módulo de Analytics
@@ -133,11 +136,15 @@ export class AnalyticsModule extends BaseModule<AnalyticsModuleConfig> {
       return null
     }
 
-    const { provider, trackingId, domain } = this.config
+    const { provider, trackingIdEncrypted, domain } = this.config
 
     switch (provider) {
       case "google": {
-        const measurementId = this.config.googleConfig?.measurementId ?? trackingId
+        let measurementId = trackingIdEncrypted ? decryptFromBase64(trackingIdEncrypted) : null
+        if (this.config.googleConfig?.measurementId) {
+          measurementId = this.config.googleConfig.measurementId
+        }
+
         if (!measurementId) return null
 
         return `
@@ -167,6 +174,10 @@ export class AnalyticsModule extends BaseModule<AnalyticsModuleConfig> {
       }
 
       case "umami": {
+        const trackingId = trackingIdEncrypted ? decryptFromBase64(trackingIdEncrypted) : null
+        // if (this.config.umamiConfig?.trackingId) {
+        //   trackingId = this.config.umamiConfig.trackingId
+        // }
         if (!trackingId) return null
         return `
           <!-- Umami Analytics -->
