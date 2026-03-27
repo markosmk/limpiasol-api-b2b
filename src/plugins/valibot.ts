@@ -20,13 +20,21 @@ const valibotPlugin: FastifyPluginAsync = async (app) => {
   })
 
   // Serializer compiler for responses to be validated/filtered
-  // app.setSerializerCompiler(({ schema }) => {
-  //   return (data) => {
-  //     // Try to parse to clean the response according to the schema
-  //     const result = safeParse(schema as any, data)
-  //     return JSON.stringify(result.success ? result.output : data)
-  //   }
-  // })
+  app.setSerializerCompiler(({ schema }) => {
+    return (data) => {
+      const result = safeParse(schema as any, data)
+      if (result.success) {
+        return JSON.stringify(result.output)
+      }
+
+      // if response doesn't match the schema, log the error and return the raw data
+      console.warn(
+        "⚠️ [Valibot Serializer] La respuesta no coincide con el schema definido:",
+        result.issues
+      )
+      return JSON.stringify(data)
+    }
+  })
 }
 
 export default fp(valibotPlugin)
