@@ -26,14 +26,12 @@ export class NotificationService {
       })
 
       // Leer settings para ver si notificamos a los admins
-      // (Ajustá esto según cómo guardes tus configuraciones)
       const notySettings = (await this.settingsService.getAllSettings(
         "notifications"
       )) as NotificationsSettingsInput
       const adminEmails = notySettings?.notificationsRecipients as string[] | undefined
 
       if (notySettings?.notifications?.notifyOnNewOrder && adminEmails && adminEmails.length > 0) {
-        // Podés crear un template "order_created_admin" o reusar el de cliente
         await this.emailService.sendTransactionalEmail({
           to: adminEmails,
           templateKey: "orderCreated",
@@ -119,7 +117,7 @@ export class NotificationService {
         templateParams.pickupLocationName = order.pickupLocationData.locationName
         templateParams.pickupAddress = order.pickupLocationData.address
       } else {
-        // Si es envío, pasamos el tracking (que suele venir en el metadata del updateOrderStatus)
+        // Si es envío, pasamos el tracking
         templateParams.trackingNumber = trackingNumber
       }
 
