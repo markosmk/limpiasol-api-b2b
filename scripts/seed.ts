@@ -1,27 +1,30 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: <explanation > */
 
 import { eq } from "drizzle-orm"
-import { drizzle } from "drizzle-orm/mysql2"
-import mysql from "mysql2/promise"
+
+// for mysql
+// import { drizzle } from "drizzle-orm/mysql2"
+// import mysql from "mysql2/promise"
+
+// for postgres
+import { drizzle } from "drizzle-orm/node-postgres"
+import { Pool } from "pg"
 import { hashPassword } from "../src/utils/auth/hash"
 import { mockProducts, mockTiers, mockUsers } from "./mocks"
 
-import {
-  type OrderInsert,
-  type OrderItemInsert,
-  orderItems,
-  orders,
-  priceTiers,
-  products,
-  users
-} from "@/db/schema"
+import { priceTiers, products, users } from "@/db/pg"
 
 async function main() {
   console.log("🌱 Starting seeding...")
 
-  const connection = await mysql.createConnection({
-    uri: process.env.DATABASE_URL
-  })
+  // for mysql
+  // const connection = await mysql.createConnection({
+  //   uri: process.env.DATABASE_URL
+  // })
+
+  // for postgres
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+  const connection = await pool.connect()
 
   const db = drizzle(connection)
 
@@ -80,81 +83,88 @@ async function main() {
     console.log("⏳ Seeding reseller orders...")
 
     // Recuperamos al usuario Reseller para asignarle las compras
-    const [reseller] = await db.select().from(users).where(eq(users.email, "reseller@business.com"))
+    const [_reseller] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "reseller@business.com"))
 
-    if (reseller) {
-      const newOrder: OrderInsert = {
-        userId: reseller.id,
-        orderCode: "ORD-001",
-        status: "pending_payment", // Estado típico de B2B
-        total: "50000.00",
-        subtotal: "50000.00",
-        deliveryType: "pickup",
-        pickupLocationData: {
-          locationId: "123",
-          locationName: "Pickup Location",
-          address: "123 Main St",
-          scheduledDate: "2026-11-11",
-          scheduledTime: "12:00"
-        }
-      }
+    // if (reseller) {
+    //   const newOrder: OrderInsert = {
+    //     userId: reseller.id,
+    //     orderCode: "ORD-001",
+    //     status: "pending_payment", // Estado típico de B2B
+    //     total: "50000.00",
+    //     subtotal: "50000.00",
+    //     deliveryType: "pickup",
+    //     pickupLocationData: {
+    //       locationId: "123",
+    //       locationName: "Pickup Location",
+    //       address: "123 Main St",
+    //       scheduledDate: "2026-11-11",
+    //       scheduledTime: "12:00"
+    //     }
+    //   }
 
-      await db
-        .insert(orders)
-        .values(newOrder)
-        .catch((e) => {
-          if (e.code !== "ER_DUP_ENTRY") throw e
-        })
+    //   await db
+    //     .insert(orders)
+    //     .values(newOrder)
+    //     .catch((e) => {
+    //       if (e.code !== "ER_DUP_ENTRY") throw e
+    //     })
 
-      // 1. Recuperamos la orden para obtener su ID real
-      const [dbOrder] = await db.select().from(orders).where(eq(orders.orderCode, "ORD-TEST-001"))
+    //   // 1. Recuperamos la orden para obtener su ID real
+    //   const [dbOrder] = await db.select().from(orders).where(eq(orders.orderCode, "ORD-TEST-001"))
 
-      // 2. Recuperamos los productos para obtener sus IDs reales
-      const dbProducts = await db.select().from(products)
+    //   // 2. Recuperamos los productos para obtener sus IDs reales
+    //   const dbProducts = await db.select().from(products)
 
-      if (dbOrder && dbProducts.length >= 2) {
-        console.log("⏳ Seeding order items...")
+    //   if (dbOrder && dbProducts.length >= 2) {
+    //     console.log("⏳ Seeding order items...")
 
-        // Sumamos 50,000 exactos para que la DB tenga sentido
-        // 10 Lavandinas x 4000 = 40,000
-        // 2 Detergentes x 5000 = 10,000
+    //     // Sumamos 50,000 exactos para que la DB tenga sentido
+    //     // 10 Lavandinas x 4000 = 40,000
+    //     // 2 Detergentes x 5000 = 10,000
 
-        const itemsToInsert: OrderItemInsert[] = [
-          {
-            orderId: dbOrder.id,
-            productId: dbProducts[0].id,
-            quantity: 10,
-            unitPrice: "4000.00",
-            lineSubtotal: "40000.00",
-            productName: dbProducts[0].name,
-            productSku: dbProducts[0].code!
-          },
-          {
-            orderId: dbOrder.id,
-            productId: dbProducts[1].id,
-            quantity: 2,
-            unitPrice: "5000.00",
-            lineSubtotal: "10000.00",
-            productName: dbProducts[1].name,
-            productSku: dbProducts[1].code!
-          }
-        ]
+    //     const itemsToInsert: OrderItemInsert[] = [
+    //       {
+    //         orderId: dbOrder.id,
+    //         productId: dbProducts[0].id,
+    //         variantId: null,
+    //         quantity: 10,
+    //         unitPrice: "4000.00",
+    //         lineSubtotal: "40000.00",
+    //         productName: dbProducts[0].name,
+    //         productSku: null,
+    //       },
+    //       {
+    //         orderId: dbOrder.id,
+    //         productId: dbProducts[1].id,
+    //         variantId: null,
+    //         quantity: 2,
+    //         unitPrice: "5000.00",
+    //         lineSubtotal: "10000.00",
+    //         productName: dbProducts[1].name,
+    //         productSku: null
+    //       }
+    //     ]
 
-        for (const item of itemsToInsert) {
-          await db
-            .insert(orderItems)
-            .values(item)
-            .catch((e) => {
-              if (e.code !== "ER_DUP_ENTRY") throw e
-            })
-        }
-      }
-    }
+    //     for (const item of itemsToInsert) {
+    //       await db
+    //         .insert(orderItems)
+    //         .values(item)
+    //         .catch((e) => {
+    //           if (e.code !== "ER_DUP_ENTRY") throw e
+    //         })
+    //     }
+    //   }
+    // }
     console.log("✅ Seeding finished successfully!")
   } catch (error) {
     console.error("❌ Seeding failed:", error)
   } finally {
-    await connection.end()
+    // close connection postgresql
+    await pool.end()
+    // await connection.end() // mysql
     console.log("🏁 Seeding finished!")
     process.exit(0)
   }

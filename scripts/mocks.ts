@@ -1,4 +1,4 @@
-import type { PriceTierInsert, ProductInsert, UserInsert } from "@/db/schema"
+import type { PriceTierInsert, ProductInsert, UserInsert } from "@/db/pg"
 export const mockUsers: Omit<UserInsert, "passwordHash">[] = [
   {
     email: "admin@business.com",
