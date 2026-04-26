@@ -18,7 +18,7 @@ export const productsRelations = relations(products, ({ many }) => ({
   categories: many(productCategories),
   images: many(productImages),
   tags: many(productTags),
-  productToCollections: many(productCollections)
+  collections: many(productCollections)
 }))
 
 export const productVariantsRelations = relations(productVariants, ({ one }) => ({

@@ -101,13 +101,15 @@ export const orderItems = mysqlTable(
       .notNull()
       .references(() => products.id, { onDelete: "restrict" }),
 
-    variantId: varchar("variant_id", { length: 24 }).references(() => productVariants.id, {
-      onDelete: "restrict"
-    }),
+    variantId: varchar("variant_id", { length: 24 })
+      .notNull()
+      .references(() => productVariants.id, {
+        onDelete: "restrict"
+      }),
 
     // snapshot
     productName: varchar("product_name", { length: 255 }).notNull(),
-    productSku: varchar("product_sku", { length: 100 }).notNull(),
+    productSku: varchar("product_sku", { length: 100 }),
     productImage: varchar("product_image", { length: 512 }),
     variantName: varchar("variant_name", { length: 100 }), // Ej: "Rojo / XL"
 

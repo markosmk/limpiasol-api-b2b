@@ -35,11 +35,6 @@ export const products = mysqlTable(
 
     // metadata
     code: varchar("code", { length: 20 }),
-    // SKU base: solo para referencia interna o productos sin variantes.
-    // Para operaciones (pedidos, inventario), usar SIEMPRE productVariants.sku
-    sku: varchar("sku", { length: 100 }).unique(),
-    barcode: varchar("barcode", { length: 100 }),
-
     isPricePublic: boolean("is_price_public").default(false), // si el precio retail debe mostrarse al publico
 
     // deletedAt: timestamp("deleted_at"),
@@ -102,6 +97,7 @@ export const productVariants = mysqlTable("product_variants", {
     .$defaultFn(() => createId()),
   productId: varchar("product_id", { length: 24 }).notNull(),
   sku: varchar("sku", { length: 100 }).notNull().unique(),
+  barcode: varchar("barcode", { length: 100 }),
   name: varchar("name", { length: 100 }).notNull(), // "Rojo / XL"
   // Ej: { "Talla": "M", "Color": "Rojo" }
   options: json("options").$type<Record<string, string>>().notNull(),
@@ -115,6 +111,8 @@ export const productVariants = mysqlTable("product_variants", {
    * }
    *
    */
+  // Reglas de compra específicas de la variante (opcional)
+  purchaseRules: json("purchase_rules").$type<PurchaseRule>(),
   // imagen por defecto para la variante, si no se especifica una, se usa la del producto
   image: varchar("image", { length: 500 }),
   stock: int("stock").default(0),
