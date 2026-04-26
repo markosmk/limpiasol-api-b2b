@@ -1,10 +1,11 @@
-// --- MYSQL (Comentado por si necesitas volver, descomenta esto y comenta Postgres) ---
-// import { type DatabaseMySQL, dbMySQL } from "./init.mysql"
-// export const db = dbMySQL
-// export type Database = DatabaseMySQL
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres"
+import { Pool } from "pg"
+import * as schema from "./pg"
 
-// --- POSTGRESQL ---
-import { type DatabasePG, dbPG } from "./init.pg"
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 10
+})
 
-export const db = dbPG
-export type Database = DatabasePG
+export const db = drizzle({ client: pool, schema })
+export type Database = NodePgDatabase<typeof schema>
