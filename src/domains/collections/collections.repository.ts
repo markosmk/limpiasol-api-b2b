@@ -2,7 +2,20 @@ import { and, eq, inArray, sql } from "drizzle-orm"
 import type { CreateCollectionInput, UpdateCollectionInput } from "./collections.schema"
 
 import { db } from "@/db"
-import { collections, productCollections } from "@/db/schema/products"
+import { collections, productCollections } from "@/db/pg/products"
+
+// Prepared Statements for better Postgres performance
+const findByIdQuery = db.query.collections
+  .findFirst({
+    where: eq(collections.id, sql.placeholder("id"))
+  })
+  .prepare("collections_find_by_id")
+
+const findBySlugQuery = db.query.collections
+  .findFirst({
+    where: eq(collections.slug, sql.placeholder("slug"))
+  })
+  .prepare("collections_find_by_slug")
 
 export class CollectionsRepository {
   async findAll() {
@@ -26,25 +39,25 @@ export class CollectionsRepository {
   }
 
   async findById(id: string) {
-    return await db.query.collections.findFirst({
-      where: eq(collections.id, id)
-    })
+    return await findByIdQuery.execute({ id })
   }
 
   async findBySlug(slug: string) {
-    return await db.query.collections.findFirst({
-      where: eq(collections.slug, slug)
-    })
+    return await findBySlugQuery.execute({ slug })
   }
 
   async create(data: CreateCollectionInput) {
-    await db.insert(collections).values(data)
-    return await this.findBySlug(data.slug)
+    const [inserted] = await db.insert(collections).values(data).returning()
+    return inserted
   }
 
   async update(id: string, data: UpdateCollectionInput) {
-    await db.update(collections).set(data).where(eq(collections.id, id))
-    return await this.findById(id)
+    const [updated] = await db
+      .update(collections)
+      .set(data)
+      .where(eq(collections.id, id))
+      .returning()
+    return updated
   }
 
   async delete(id: string) {
@@ -68,12 +81,7 @@ export class CollectionsRepository {
 
     if (values.length === 0) return
 
-    await db
-      .insert(productCollections)
-      .values(values)
-      .onDuplicateKeyUpdate({
-        set: { productId: sql`product_id` }
-      })
+    await db.insert(productCollections).values(values).onConflictDoNothing() // En Postgres si ya existe la relación, no hacemos nada
   }
 
   /**

@@ -6,7 +6,7 @@ import { db, setupTestDB, teardownTestDB } from "#test/utils/test-db"
 import adminRoutes from "./admin.routes"
 import type { FastifyInstance } from "fastify"
 
-import { settings } from "@/db/schema/settings"
+import { settings } from "@/db/pg/settings"
 import { appEvents, EventTypes } from "@/events/emitter"
 
 // Mockeamos la encriptación para asertar sin depender de variables de entorno

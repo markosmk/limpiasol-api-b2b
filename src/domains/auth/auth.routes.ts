@@ -40,7 +40,7 @@ export default async function authRoutes(app: FastifyInstance) {
       reply.setCookie("session", session.sessionId, {
         path: "/",
         httpOnly: true,
-        secure: true,
+        secure: process.env.NODE_ENV === "production", // true,
         sameSite: "lax",
         expires: session.expiresAt
       })

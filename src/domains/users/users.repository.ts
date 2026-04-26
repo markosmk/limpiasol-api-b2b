@@ -2,7 +2,13 @@ import { and, count, eq, sql } from "drizzle-orm"
 import type { ListUsersInput, UpdateRoleInput, UpdateStatusInput } from "./users.schema"
 
 import { db } from "@/db"
-import { users } from "@/db/schema/users"
+import { users } from "@/db/pg/users"
+
+const findByIdQuery = db
+  .select()
+  .from(users)
+  .where(eq(users.id, sql.placeholder("id")))
+  .prepare("users_find_by_id")
 
 export const usersRepository = {
   async list(filters: ListUsersInput) {
@@ -43,7 +49,7 @@ export const usersRepository = {
   },
 
   async findById(id: string) {
-    const [user] = await db.select().from(users).where(eq(users.id, id))
+    const [user] = await findByIdQuery.execute({ id })
     return user
   },
 

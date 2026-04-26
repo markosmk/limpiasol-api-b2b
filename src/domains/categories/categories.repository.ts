@@ -1,8 +1,21 @@
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import type { CreateCategoryInput, UpdateCategoryInput } from "./categories.schema"
 
 import { db } from "@/db"
-import { categories, productCategories } from "@/db/schema/products"
+import { categories, productCategories } from "@/db/pg/products"
+
+// Prepared Statements for better Postgres performance
+const findByIdQuery = db.query.categories
+  .findFirst({
+    where: eq(categories.id, sql.placeholder("id"))
+  })
+  .prepare("categories_find_by_id")
+
+const findBySlugQuery = db.query.categories
+  .findFirst({
+    where: eq(categories.slug, sql.placeholder("slug"))
+  })
+  .prepare("categories_find_by_slug")
 
 export class CategoriesRepository {
   async findAll() {
@@ -25,25 +38,23 @@ export class CategoriesRepository {
   }
 
   async findById(id: string) {
-    return await db.query.categories.findFirst({
-      where: eq(categories.id, id)
-    })
+    return await findByIdQuery.execute({ id })
   }
 
   async findBySlug(slug: string) {
-    return await db.query.categories.findFirst({
-      where: eq(categories.slug, slug)
-    })
+    return await findBySlugQuery.execute({ slug })
   }
 
   async create(data: CreateCategoryInput) {
-    await db.insert(categories).values(data)
-    return await this.findBySlug(data.slug)
+    // Postgres supports native RETURNING, which avoids a second SELECT query!
+    const [inserted] = await db.insert(categories).values(data).returning()
+    return inserted
   }
 
   async update(id: string, data: UpdateCategoryInput) {
-    await db.update(categories).set(data).where(eq(categories.id, id))
-    return await this.findById(id)
+    // Native RETURNING on update
+    const [updated] = await db.update(categories).set(data).where(eq(categories.id, id)).returning()
+    return updated
   }
 
   async delete(id: string) {
@@ -68,12 +79,12 @@ export class CategoriesRepository {
 
     if (values.length === 0) return
 
-    // Using insert ignore or upsert to avoid duplicates as product_categories has a PK on (productId, categoryId)
-    // Drizzle on MySQL: ON DUPLICATE KEY UPDATE isPrimary = VALUES(isPrimary)
+    // In Postgres we use onConflictDoUpdate for upserts
     await db
       .insert(productCategories)
       .values(values)
-      .onDuplicateKeyUpdate({
+      .onConflictDoUpdate({
+        target: [productCategories.productId, productCategories.categoryId],
         set: { isPrimary: isPrimary }
       })
   }

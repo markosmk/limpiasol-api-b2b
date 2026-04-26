@@ -1,8 +1,32 @@
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, sql } from "drizzle-orm"
 
 import { db } from "@/db"
-import { session as sessions, verificationTokens } from "@/db/schema/auth"
-import { users } from "@/db/schema/users"
+import { session as sessions, verificationTokens } from "@/db/pg/auth"
+import { users } from "@/db/pg/users"
+
+const findUserByEmailQuery = db
+  .select()
+  .from(users)
+  .where(eq(users.email, sql.placeholder("email")))
+  .prepare("auth_find_user_by_email")
+
+const findUserByIdQuery = db
+  .select()
+  .from(users)
+  .where(eq(users.id, sql.placeholder("id")))
+  .prepare("auth_find_user_by_id")
+
+const findSessionWithUserQuery = db
+  .select({
+    userId: users.id,
+    role: users.role,
+    expiresAt: sessions.expiresAt
+  })
+  .from(sessions)
+  .innerJoin(users, eq(users.id, sessions.userId))
+  .where(eq(sessions.id, sql.placeholder("sessionId")))
+  .limit(1)
+  .prepare("auth_find_session_with_user")
 
 export const authRepository = {
   async createUser(user: {
@@ -11,7 +35,8 @@ export const authRepository = {
     status?: "pending_approval" | "active" | "rejected" | "suspended"
     emailVerified?: boolean
   }) {
-    const [inserted] = await db
+    // Postgres supports RETURNING to get the full row back immediately
+    const [fullUser] = await db
       .insert(users)
       .values({
         email: user.email,
@@ -19,9 +44,8 @@ export const authRepository = {
         status: user.status,
         emailVerified: user.emailVerified
       })
-      .$returningId()
+      .returning()
 
-    const [fullUser] = await db.select().from(users).where(eq(users.id, inserted.id))
     return fullUser!
   },
 
@@ -56,28 +80,17 @@ export const authRepository = {
   },
 
   async findUserByEmail(email: string) {
-    const [user] = await db.select().from(users).where(eq(users.email, email))
-
+    const [user] = await findUserByEmailQuery.execute({ email })
     return user
   },
 
   async findUserById(id: string) {
-    const [user] = await db.select().from(users).where(eq(users.id, id))
+    const [user] = await findUserByIdQuery.execute({ id })
     return user
   },
 
   async findSessionWithUser(sessionId: string) {
-    const result = await db
-      .select({
-        userId: users.id,
-        role: users.role,
-        expiresAt: sessions.expiresAt
-      })
-      .from(sessions)
-      .innerJoin(users, eq(users.id, sessions.userId))
-      .where(eq(sessions.id, sessionId))
-      .limit(1)
-
+    const result = await findSessionWithUserQuery.execute({ sessionId })
     return result[0] ?? null
   },
 

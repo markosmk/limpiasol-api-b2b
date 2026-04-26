@@ -1,13 +1,32 @@
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import type { ModuleConfig } from "@/utils/modules/module.types"
 import type { UpdateSettingsInput } from "./admin.schema"
 
 import { db } from "@/db"
-import { settings } from "@/db/schema/settings"
+import { settings } from "@/db/pg/settings"
+
+// Prepared statements for frequently-hit queries
+const getSettingQuery = db
+  .select()
+  .from(settings)
+  .where(eq(settings.key, sql.placeholder("key")))
+  .prepare("admin_get_setting")
+
+const getModuleConfigQuery = db
+  .select()
+  .from(settings)
+  .where(and(eq(settings.key, sql.placeholder("key")), eq(settings.category, "modules")))
+  .prepare("admin_get_module_config")
+
+const listModulesQuery = db
+  .select()
+  .from(settings)
+  .where(eq(settings.category, "modules"))
+  .prepare("admin_list_modules")
 
 export class AdminRepository {
   async getSetting(key: string) {
-    return await db.select().from(settings).where(eq(settings.key, key))
+    return await getSettingQuery.execute({ key })
   }
 
   async getSettings(category?: string) {
@@ -18,6 +37,7 @@ export class AdminRepository {
   }
 
   async updateSetting(data: UpdateSettingsInput) {
+    // Postgres upsert via ON CONFLICT on primary key
     await db
       .insert(settings)
       .values({
@@ -25,7 +45,8 @@ export class AdminRepository {
         value: data.value,
         category: data.category || "general"
       })
-      .onDuplicateKeyUpdate({
+      .onConflictDoUpdate({
+        target: [settings.key],
         set: {
           value: data.value,
           updatedAt: new Date()
@@ -34,15 +55,12 @@ export class AdminRepository {
   }
 
   async listModules() {
-    return await db.select().from(settings).where(eq(settings.category, "modules"))
+    return await listModulesQuery.execute()
   }
 
   async getModuleConfig(moduleName: string) {
     const key = `modules:${moduleName}`
-    const [setting] = await db
-      .select()
-      .from(settings)
-      .where(and(eq(settings.key, key), eq(settings.category, "modules")))
+    const [setting] = await getModuleConfigQuery.execute({ key })
     return setting?.value || null
   }
 
@@ -55,7 +73,8 @@ export class AdminRepository {
         category: "modules",
         value: config
       })
-      .onDuplicateKeyUpdate({
+      .onConflictDoUpdate({
+        target: [settings.key],
         set: {
           value: config,
           updatedAt: new Date()

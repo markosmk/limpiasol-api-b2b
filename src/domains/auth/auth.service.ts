@@ -49,7 +49,7 @@ export const authService = {
   async login(email: string, password: string) {
     const user = await authRepository.findUserByEmail(email)
 
-    if (!user || !user.passwordHash) {
+    if (!user?.passwordHash) {
       throw new AppError({ code: "invalid_credentials" })
     }
 

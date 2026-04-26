@@ -1,6 +1,6 @@
 import * as v from "valibot"
 
-import { adminLevelValues, userRoleValues, userStatusValues } from "@/db/schema/users"
+import { adminLevelValues, userRoleValues, userStatusValues } from "@/db/pg/users"
 
 export const listUsersSchema = v.object({
   status: v.optional(v.picklist(userStatusValues, "Estado inválido")),

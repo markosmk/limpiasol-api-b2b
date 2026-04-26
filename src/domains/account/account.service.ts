@@ -1,6 +1,6 @@
-import { accountRepository } from "./account.repository"
-import type { UpdateMeInput } from "./account.schema"
+import type { UpdateMeInput } from "@/domains/account/account.schema"
 
+import { accountRepository } from "@/domains/account/account.repository"
 import { authRepository } from "@/domains/auth/auth.repository"
 import { AppError } from "@/utils/app-error"
 import { hashPassword, verifyPassword } from "@/utils/auth/hash"
@@ -23,7 +23,7 @@ export const accountService = {
 
   async changePassword(userId: string, oldPassword: string, newPassword: string) {
     const user = await authRepository.findUserById(userId)
-    if (!user || !user.passwordHash) {
+    if (!user?.passwordHash) {
       throw new AppError({ code: "user_not_found" })
     }
 

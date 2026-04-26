@@ -1,4 +1,4 @@
-import type { DeliveryType } from "@/db/schema/orders.types"
+import type { DeliveryType } from "@/db/pg/orders.types"
 
 export type OrderNotification = {
   orderCode: string
