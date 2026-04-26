@@ -1,13 +1,10 @@
-import { drizzle, type MySql2Database } from "drizzle-orm/mysql2"
-import mysql from "mysql2/promise"
-import * as schema from "./schema"
+// --- MYSQL (Comentado por si necesitas volver, descomenta esto y comenta Postgres) ---
+// import { type DatabaseMySQL, dbMySQL } from "./init.mysql"
+// export const db = dbMySQL
+// export type Database = DatabaseMySQL
 
-const connection = mysql.createPool({
-  uri: process.env.DATABASE_URL,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-})
+// --- POSTGRESQL ---
+import { type DatabasePG, dbPG } from "./init.pg"
 
-export const db = drizzle(connection, { schema, mode: "default" })
-export type Database = MySql2Database<typeof schema>
+export const db = dbPG
+export type Database = DatabasePG
