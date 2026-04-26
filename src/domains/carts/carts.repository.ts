@@ -1,7 +1,7 @@
-import { and, eq, isNull, lt } from "drizzle-orm"
+import { and, eq, lt } from "drizzle-orm"
 
 import { type Database, db } from "@/db"
-import { cartItems, carts } from "@/db/schema/carts"
+import { cartItems, carts } from "@/db/pg"
 
 export class CartsRepository {
   private database: Database
@@ -17,53 +17,40 @@ export class CartsRepository {
   }
 
   async createCart(userId: string) {
-    await this.database.insert(carts).values({ userId, status: "active" })
-    // user has one cart
-    return this.findActiveCartByUserId(userId)
-  }
+    const [cart] = await this.database
+      .insert(carts)
+      .values({ userId, status: "active" })
+      .returning()
+    if (!cart) return null
 
-  async upsertCartItem(
-    cartId: string,
-    productId: string,
-    variantId: string | undefined,
-    quantity: number
-  ) {
-    // 1. Buscamos si ya existe esa combinación exacta en el carrito
-    const existingItem = await this.database.query.cartItems.findFirst({
-      where: and(
-        eq(cartItems.cartId, cartId),
-        eq(cartItems.productId, productId),
-        variantId ? eq(cartItems.variantId, variantId) : isNull(cartItems.variantId)
-      )
+    return await this.database.query.carts.findFirst({
+      where: and(eq(carts.userId, userId), eq(carts.id, cart.id), eq(carts.status, "active")),
+      with: { items: true }
     })
-
-    if (existingItem) {
-      // 2. Si existe, sumamos la cantidad (o la pisamos, según tu regla de negocio)
-      await this.database
-        .update(cartItems)
-        .set({ quantity: quantity }) // o existingItem.quantity + quantity
-        .where(eq(cartItems.id, existingItem.id))
-    } else {
-      // 3. Si no existe, lo insertamos
-      await this.database.insert(cartItems).values({
-        cartId,
-        productId,
-        variantId: variantId || null,
-        quantity
-      })
-    }
   }
 
-  async deleteCartItem(cartId: string, productId: string, variantId: string | undefined) {
+  async findCartItem(cartId: string, variantId: string) {
+    return this.database.query.cartItems.findFirst({
+      where: and(eq(cartItems.cartId, cartId), eq(cartItems.variantId, variantId))
+    })
+  }
+
+  async insertCartItem(cartId: string, variantId: string, quantity: number) {
+    await this.database.insert(cartItems).values({
+      cartId,
+      variantId,
+      quantity
+    })
+  }
+
+  async updateCartItemQuantity(itemId: string, quantity: number) {
+    await this.database.update(cartItems).set({ quantity }).where(eq(cartItems.id, itemId))
+  }
+
+  async deleteCartItem(cartId: string, variantId: string) {
     await this.database
       .delete(cartItems)
-      .where(
-        and(
-          eq(cartItems.cartId, cartId),
-          eq(cartItems.productId, productId),
-          variantId ? eq(cartItems.variantId, variantId) : isNull(cartItems.variantId)
-        )
-      )
+      .where(and(eq(cartItems.cartId, cartId), eq(cartItems.variantId, variantId)))
   }
 
   async clearCart(cartId: string) {
@@ -78,6 +65,11 @@ export class CartsRepository {
   }
 
   // TODO: implement on cron job or on user login, or get active cart
+  // ej:
+  // this.cartsRepository.cleanupOldCarts(userId).catch(err => {
+  //     // si falla, no nos importa, no bloqueamos la respuesta al cliente
+  //     console.error(`Error limpiando carritos viejos del user ${userId}:`, err)
+  //   })
   async cleanupOldCarts(userId: string) {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
@@ -90,11 +82,6 @@ export class CartsRepository {
       )
     )
   }
-  // ej:
-  // this.cartsRepository.cleanupOldCarts(userId).catch(err => {
-  //     // si falla, no nos importa, no bloqueamos la respuesta al cliente
-  //     console.error(`Error limpiando carritos viejos del user ${userId}:`, err)
-  //   })
 }
 
 export const cartsRepository = new CartsRepository()

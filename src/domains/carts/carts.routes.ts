@@ -37,19 +37,19 @@ export default async function cartsRoutes(app: FastifyInstance) {
     }
   )
 
-  // PATCH /carts/items/:productId - Modificar cantidad exacta (0 para borrar)
+  // PATCH /carts/items/:variantId - Modificar cantidad exacta (0 para borrar)
   app.patch(
-    "/items/:productId",
+    "/items/:variantId",
     {
       schema: { body: UpdateCartItemDto }
     },
     async (req) => {
-      const user = req.user
-      const { productId } = req.params as { productId: string }
-      const { variantId, quantity } = req.body as v.InferOutput<typeof UpdateCartItemDto>
+      const user = req.user!
+      const { variantId } = req.params as { variantId: string }
+      const { quantity } = req.body as { quantity: number }
 
       const userTier = user ? getTierFromRole(user.role) : "retail"
-      return cartsService.updateItemQuantity(user!.id, productId, variantId, quantity, userTier)
+      return cartsService.updateItemQuantity(user!.id, variantId, quantity, userTier)
     }
   )
 

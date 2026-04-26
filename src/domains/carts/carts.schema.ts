@@ -21,13 +21,12 @@ export const CartItemSchema = v.object({
 
 // --- DTOs de Entrada (Para Rutas/Controladores) ---
 export const AddToCartDto = v.object({
-  productId: v.pipe(v.string(), v.cuid2()),
-  variantId: v.optional(v.pipe(v.string(), v.cuid2())),
+  variantId: v.pipe(v.string(), v.cuid2()),
   quantity: v.pipe(v.number(), v.integer(), v.minValue(1, "La cantidad mínima es 1"))
 })
 
 export const UpdateCartItemDto = v.object({
-  variantId: v.optional(v.pipe(v.string(), v.cuid2())),
+  // variantId: v.pipe(v.string(), v.cuid2()),
   quantity: v.pipe(v.number(), v.integer(), v.minValue(0, "Usa 0 para eliminar el ítem"))
 })
 

@@ -15,42 +15,42 @@ export class CartsService {
   ) {}
 
   async getOrCreateActiveCart(userId: string) {
-    let cart = await this.cartsRepo.findActiveCartByUserId(userId)
+    const cart = await this.cartsRepo.findActiveCartByUserId(userId)
     if (!cart) {
-      cart = await this.cartsRepo.createCart(userId)
+      return await this.cartsRepo.createCart(userId)
     }
     return cart
   }
 
   async getActiveCartHydrated(userId: string, userTier: string) {
-    // 1. Obtenemos el carrito crudo de la BD
     const cart = await this.getOrCreateActiveCart(userId)
-
-    // 2. Si no hay items, retornamos con subtotal 0
     if (!cart?.items || cart.items.length === 0) {
       return { ...cart, subtotal: 0, items: [] }
     }
 
+    // 1. Pasamos el array limpio al servicio de pricing (sin Promise.all)
+    const itemsToCalculate = cart.items.map((i) => ({
+      variantId: i.variantId,
+      quantity: i.quantity
+    }))
+
+    const calculatedPricesMap = await this.pricingService.calculatePricesBulk(
+      itemsToCalculate,
+      userTier as UserTier
+    )
+
     let subtotal = 0
 
-    // 3. Hidratamos cada ítem con su precio dinámico
-    const hydratedItems = await Promise.all(
-      cart.items.map(async (item) => {
-        const pricing = await this.pricingService.calculatePrice({
-          productId: item.productId,
-          variantId: item.variantId ?? undefined,
-          userTier: userTier as UserTier,
-          quantity: item.quantity
-        })
+    // 2. Mapeamos los resultados devueltos al carrito
+    const hydratedItems = cart.items.map((item) => {
+      const pricing = calculatedPricesMap[item.variantId]
+      subtotal += pricing.finalSubtotal
 
-        subtotal += pricing.finalSubtotal
-
-        return {
-          ...item,
-          pricing // Agregamos el objeto de pricing al item
-        }
-      })
-    )
+      return {
+        ...item,
+        pricing
+      }
+    })
 
     // 4. Retornamos el carrito completo con el subtotal calculado
     return {
@@ -61,32 +61,30 @@ export class CartsService {
   }
 
   async addItem(userId: string, data: AddToCartInput, userTier: UserTier) {
+    const cart = await this.getOrCreateActiveCart(userId)
+    if (!cart) throw new AppError({ code: "NOT_FOUND", message: "Carrito activo no encontrado." })
+
+    // 1. Buscamos si ya existe para saber la cantidad actual
+    const existingItem = await this.cartsRepo.findCartItem(cart.id, data.variantId)
+
+    // 2. Calculamos la nueva cantidad TOTAL a validar
+    const newTotalQuantity = (existingItem?.quantity || 0) + data.quantity
+
     // 1. Validar reglas de compra ANTES de hacer nada
-    const validation = await this.pricingService.validateQuantity(
-      data.productId,
-      data.quantity,
-      data.variantId
-    )
+    const validation = await this.pricingService.validateQuantity(newTotalQuantity, data.variantId)
 
     if (!validation.valid) {
       throw new AppError({
-        code: "custom",
-        message: validation.error,
-        statusCode: 400
+        code: "VALIDATION_RULES",
+        message: validation.error
       })
     }
 
-    // 1. Obtener o crear carrito activo
-    const cart = await this.getOrCreateActiveCart(userId)
-    if (!cart)
-      throw new AppError({
-        code: "custom",
-        message: "No se pudo crear el carrito",
-        statusCode: 500
-      })
-
-    // 2. Insertar o actualizar item
-    await this.cartsRepo.upsertCartItem(cart.id, data.productId, data.variantId, data.quantity)
+    if (existingItem) {
+      await this.cartsRepo.updateCartItemQuantity(existingItem.id, newTotalQuantity)
+    } else {
+      await this.cartsRepo.insertCartItem(cart.id, data.variantId, data.quantity)
+    }
 
     // 3. Retornar carrito actualizado
     return this.getActiveCartHydrated(userId, userTier)
@@ -94,23 +92,28 @@ export class CartsService {
 
   async updateItemQuantity(
     userId: string,
-    productId: string,
-    variantId: string | undefined,
+    variantId: string,
     quantity: number,
     userTier: UserTier
   ) {
     const cart = await this.cartsRepo.findActiveCartByUserId(userId)
-    if (!cart) throw new AppError({ code: "not_found", message: "Carrito activo no encontrado" })
+    if (!cart) throw new AppError({ code: "NOT_FOUND", message: "Carrito activo no encontrado." })
 
     // Validar reglas si la cantidad no es 0
     if (quantity > 0) {
-      const validation = await this.pricingService.validateQuantity(productId, quantity, variantId)
-      if (!validation.valid)
-        throw new AppError({ code: "custom", message: validation.error, statusCode: 400 })
-
-      await this.cartsRepo.upsertCartItem(cart.id, productId, variantId, quantity)
+      // Aquí validamos directamente la cantidad entrante porque es una sobrescritura absoluta
+      const validation = await this.pricingService.validateQuantity(quantity, variantId)
+      if (!validation.valid) {
+        throw new AppError({ code: "VALIDATION_RULES", message: validation.error })
+      }
+      const existingItem = await this.cartsRepo.findCartItem(cart.id, variantId)
+      if (existingItem) {
+        await this.cartsRepo.updateCartItemQuantity(existingItem.id, quantity)
+      } else {
+        await this.cartsRepo.insertCartItem(cart.id, variantId, quantity)
+      }
     } else {
-      await this.cartsRepo.deleteCartItem(cart.id, productId, variantId)
+      await this.cartsRepo.deleteCartItem(cart.id, variantId)
     }
 
     return this.getActiveCartHydrated(userId, userTier)
