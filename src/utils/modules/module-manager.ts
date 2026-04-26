@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm"
 import type { ModuleConfig } from "./module.types"
 
 import { db } from "@/db"
-import { settings } from "@/db/schema"
+import { settings } from "@/db/pg/settings"
 
 /**
  * ModuleManager: Solo operaciones genéricas
@@ -55,7 +55,7 @@ export const moduleManager = {
       updatedAt: new Date().toISOString()
     }
 
-    // 3. Upsert en DB
+    // 3. Upsert en DB (Postgres ON CONFLICT)
     await db
       .insert(settings)
       .values({
@@ -63,7 +63,8 @@ export const moduleManager = {
         category: "modules",
         value: mergedConfig
       })
-      .onDuplicateKeyUpdate({
+      .onConflictDoUpdate({
+        target: [settings.key],
         set: {
           value: mergedConfig,
           updatedAt: new Date()
