@@ -1,18 +1,29 @@
-import { drizzle } from "drizzle-orm/mysql2"
-import mysql from "mysql2/promise"
+// import { drizzle } from "drizzle-orm/mysql2"
+// import mysql from "mysql2/promise"
+
+// for postgres
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres"
+import { Pool } from "pg"
 import type { Database } from "@/db"
 
-import * as schema from "@/db/schema"
+import * as schema from "@/db/pg"
 
-let connection: mysql.Connection
+// import * as schema from "@/db/schema"
+
+// let connection: mysql.Connection
+let connection: NodePgDatabase<typeof schema>
 let db: Database
 
 async function setupTestDB() {
   const url = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL
   if (!url) throw new Error("DATABASE_URL or TEST_DATABASE_URL is required")
 
-  connection = await mysql.createConnection(url)
-  db = drizzle(connection, { schema, mode: "default" })
+  // connection = await mysql.createConnection(url)
+  // db = drizzle(connection, { schema, mode: "default" })
+  // return db
+  const pool = new Pool({ connectionString: url })
+  connection = drizzle({ client: pool, schema })
+  db = connection
   return db
 }
 
@@ -41,7 +52,7 @@ async function teardownTestDB() {
     await connection.execute(`TRUNCATE TABLE ${table}`)
   }
   await connection.execute("SET FOREIGN_KEY_CHECKS = 1")
-  await connection.end()
+  // await connection.end()
 }
 
 // not use on routes tests because the tests use fastify cookies

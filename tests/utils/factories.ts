@@ -6,7 +6,7 @@ import {
   priceTiers,
   products,
   productVariants
-} from "@/db/schema"
+} from "@/db/pg"
 
 export const factories = {
   async createProduct(overrides = {} as Partial<ProductInsert>) {
@@ -18,7 +18,7 @@ export const factories = {
         status: "published",
         ...overrides
       })
-      .$returningId()
+      .returning({ id: products.id })
     if (!product) throw new Error("Failed to create product")
     return product
   },
@@ -32,7 +32,7 @@ export const factories = {
         price: "100.00",
         ...overrides
       })
-      .$returningId()
+      .returning({ id: priceTiers.id })
     if (!tier) throw new Error("Failed to create price tier")
     return tier
   },
@@ -47,7 +47,7 @@ export const factories = {
         options: {},
         ...overrides
       })
-      .$returningId()
+      .returning({ id: productVariants.id })
     if (!variant) throw new Error("Failed to create variant")
     return variant
   }

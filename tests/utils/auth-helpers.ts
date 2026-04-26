@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 
 import { db } from "@/db"
-import { users } from "@/db/schema"
+import { users } from "@/db/pg/users"
 import { authService } from "@/domains/auth/auth.service"
 
 export type TestUserContext = {
@@ -27,7 +27,7 @@ export async function createTestUserAndSession(
       emailVerified: true,
       name: `Test ${role}`
     })
-    .$returningId()
+    .returning({ id: users.id })
 
   const session = await authService.createSession(user.id)
 
