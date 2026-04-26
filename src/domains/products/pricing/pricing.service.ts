@@ -1,8 +1,6 @@
 import { applyVolumeDiscount, validatePurchaseRules } from "../lib/pricing.utils"
-import { type ProductsRepository, productsRepository } from "../products.repository"
-import { type ProductsPricingRepository, productsPricingRepository } from "./pricing.repository"
-import type { PriceTier } from "@/db/schema"
-import type { PurchaseRule } from "@/db/schema/products.types"
+import type { PriceTier } from "@/db/pg/products"
+import type { VolumeDiscount } from "@/db/pg/products.types"
 import type {
   PriceValidationResult,
   PricingContext,
@@ -10,6 +8,11 @@ import type {
   UserTier
 } from "./pricing.types"
 
+import {
+  type ProductsPricingRepository,
+  productsPricingRepository
+} from "@/domains/products/pricing/pricing.repository"
+import { type ProductsRepository, productsRepository } from "@/domains/products/products.repository"
 import { AppError } from "@/utils/app-error"
 
 export class ProductsPricingService {
@@ -17,22 +20,25 @@ export class ProductsPricingService {
     private readonly repository: ProductsPricingRepository,
     private readonly productsRepo: ProductsRepository
   ) {}
+
   /**
    * Calcula el precio final para un usuario según su tier, cantidad y variante
+   * use:
+   * - in adjusting pricing of a product specific..
+   * - in show price of a product in product detail
    */
   async calculatePrice(ctx: PricingContext): Promise<PricingResult> {
     // TODO: better performance one query
     // const tiers = await productsPricingRepository.findPriceTiersForProduct(productId, variantId)
     // const tier = tiers.find(t => t.tierType === userTier) || tiers.find(t => t.tierType === "retail")
 
-    const tier = await this.repository.findPriceTier(ctx)
+    const tier = await this.repository.findPriceTier(ctx.productId, ctx.variantId, ctx.userTier)
     if (!tier) {
       const fallback = await this.repository.findFallbackRetailPrice(ctx.productId, ctx.variantId)
       if (!fallback) {
         throw new AppError({
-          code: "price_not_found",
-          message: `No hay precio disponible para este producto`,
-          statusCode: 404
+          code: "NOT_FOUND",
+          message: "No hay precio disponible para este producto"
         })
       }
       return this._buildPricingResult(fallback, ctx.quantity, "retail")
@@ -41,86 +47,90 @@ export class ProductsPricingService {
   }
 
   /**
+   * Calcula los precios para múltiples variantes en una sola pasada de BD.
+   * Retorna un Record/Diccionario donde la key es el variantId.
+   */
+  async calculatePricesBulk(
+    items: Array<{ variantId: string; quantity: number }>,
+    userTier: UserTier
+  ): Promise<Record<string, PricingResult>> {
+    if (items.length === 0) return {}
+
+    const variantIds = items.map((i) => i.variantId)
+
+    // 1. Un solo viaje a la BD para traer todos los precios (tier actual y retail)
+    const allTiers = await this.repository.findPriceTiersBulk(variantIds, userTier)
+
+    const bulkResults: Record<string, PricingResult> = {}
+
+    // 2. Procesamos en memoria
+    for (const item of items) {
+      // Intentamos buscar el precio específico del tier
+      let tier = allTiers.find((t) => t.variantId === item.variantId && t.tierType === userTier)
+      let appliedTier = userTier
+
+      // Fallback a retail si no existe el tier específico
+      if (!tier) {
+        tier = allTiers.find((t) => t.variantId === item.variantId && t.tierType === "retail")
+        appliedTier = "retail"
+      }
+
+      if (!tier) {
+        // Si no hay precio ni de retail, podrías lanzar error o devolver un resultado inválido
+        throw new AppError({
+          code: "price_not_found",
+          message: `No hay precio disponible para la variante ${item.variantId}`,
+          statusCode: 404
+        })
+      }
+
+      // 3. Reutilizamos tu lógica exacta de descuentos por volumen
+      bulkResults[item.variantId] = this._buildPricingResult(tier, item.quantity, appliedTier)
+    }
+
+    return bulkResults
+  }
+
+  /**
    * Valida si una cantidad cumple las reglas de compra del producto
    * (purchaseRules JSON)
    */
-  async validateQuantity(
-    productId: string,
-    quantity: number,
-    _variantId?: string | null
-  ): Promise<PriceValidationResult> {
-    // FUTURO: Si las variantes necesitan reglas propias:
-    // - Agregar campo `purchaseRules` en `productVariants`
-    // - Priorizar: variante.rules > producto.rules > defaults
-    // - Ej: Variante "Mayorista" podría tener minQuantity: 50, mientras el producto base tiene 10
-
-    // 1. Buscar producto con sus reglas (solo activos para rutas públicas)
-    const product = await this.productsRepo.findProductById(productId)
-    if (!product) {
+  async validateQuantity(quantity: number, variantId: string): Promise<PriceValidationResult> {
+    const activeRules = await this.productsRepo.getResolvedPurchaseRules(variantId)
+    if (!activeRules) {
       return {
         valid: false,
         code: "not_found",
-        error: "Producto no disponible",
+        error: "Variante no encontrada",
         suggestion: "Verificá el ID o contactá a soporte"
       }
     }
+
     // FUTURO: Si las reglas se complejizan, migrar a tabla normalizada:
     // - Crear tabla `product_rules` con columns: productId, ruleType, config (JSON), priority
     // - Reemplazar esta llamada por: await productsRulesRepository.findByProduct(productId)
     // - La función validatePurchaseRules sigue siendo la misma (solo cambia la fuente de datos)
-
-    // 2. Parsear reglas (con fallback a valores por defecto)
-    const rules = product.purchaseRules as PurchaseRule
-
-    const defaultRules = {
-      minQuantity: 1,
-      maxQuantity: undefined as number | undefined,
-      stepQuantity: 1,
-      unitName: "unidades"
-    }
-
-    const purchaseRules = rules || defaultRules
-
-    return validatePurchaseRules(quantity, purchaseRules)
+    return validatePurchaseRules(quantity, activeRules)
   }
 
   /**
    * Obtiene todas las opciones de precio para mostrar en UI
    * (ej: "Precio lista: $100 | Mayorista: $75 | Revendedor: $60")
    */
-  async getPriceOptions(productId: string, variantId?: string | null) {
-    const tiers = await this.repository.getAllPriceOptions(productId, variantId)
+  async getPriceOptions(productId: string, variantId?: string | null, userTier?: string) {
+    const tiers = await this.repository.getAllPriceOptions(productId, variantId, userTier)
 
     return tiers.map((tier) => ({
       tierType: tier.tierType,
+      // Precio base (el que paga el usuario)
       basePrice: Number(tier.price),
+      // Precio tachado
       compareAtPrice: tier.compareAtPrice ? Number(tier.compareAtPrice) : undefined,
-      minQuantity: tier.minQuantity,
-      volumeDiscounts: tier.volumeDiscounts as
-        | Array<{
-            quantity: number
-            discountPercent: number
-          }>
-        | undefined
+      // Descuento de volumen aplica desde X unidades
+      // minQuantity: tier.minQuantity,
+      // Descuentos por volumen
+      volumeDiscounts: tier.volumeDiscounts as VolumeDiscount[] | undefined
     }))
-  }
-
-  /**
-   * Obtiene el precio base para mostrar en catálogo/detalle
-   * Usa minQuantity o 1, según lo que tenga sentido para el producto
-   */
-  async getDisplayPrice(productId: string, variantId?: string | null, userTier?: string) {
-    // TODO: create repository only get basic info and purchaseRules
-    const product = await this.productsRepo.findProductById(productId)
-    const rules = product?.purchaseRules as PurchaseRule
-    const quantity = rules?.minQuantity || 1
-
-    return await this.calculatePrice({
-      productId,
-      variantId,
-      userTier: (userTier as UserTier) || "retail",
-      quantity
-    })
   }
 
   /**
@@ -128,9 +138,7 @@ export class ProductsPricingService {
    */
   _buildPricingResult(tier: PriceTier, quantity: number, appliedTier: string): PricingResult {
     const basePrice = Number(tier.price)
-    const volumeDiscounts = tier.volumeDiscounts as
-      | Array<{ quantity: number; discountPercent: number }>
-      | undefined
+    const volumeDiscounts = tier.volumeDiscounts as VolumeDiscount[] | undefined
 
     const { price: finalPrice, appliedDiscount } = applyVolumeDiscount(
       basePrice,
@@ -147,7 +155,7 @@ export class ProductsPricingService {
       appliedTier: appliedTier as UserTier,
       volumeDiscount: appliedDiscount,
       finalSubtotal: Math.round(finalPrice * quantity * 100) / 100,
-      minQuantity: tier.minQuantity || 1,
+      // minQuantity: tier.minQuantity || 1,
       hasDiscount: finalPrice < basePrice,
       discountPercent:
         finalPrice < basePrice ? Math.round(((basePrice - finalPrice) / basePrice) * 100) : 0

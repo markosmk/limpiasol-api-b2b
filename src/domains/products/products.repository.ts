@@ -1,6 +1,13 @@
 import { createId } from "@paralleldrive/cuid2"
-import { and, eq, inArray, isNull } from "drizzle-orm"
-import type { ProductInsert } from "@/db/schema/products"
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm"
+import type {
+  PriceTierInsert,
+  Product,
+  ProductImageInsert,
+  ProductInsert,
+  ProductVariantInsert
+} from "@/db/pg/products"
+import type { PurchaseRule } from "@/db/pg/products.types"
 import type { ProductSummary } from "./products.types"
 
 import { db } from "@/db"
@@ -13,56 +20,142 @@ import {
   productTags,
   productVariants,
   tags
-} from "@/db/schema"
+} from "@/db/pg"
+
+// Prepared Statement para la consulta más frecuente del catálogo: buscar producto por slug
+const findProductBySlugQuery = db.query.products
+  .findFirst({
+    columns: {
+      id: true,
+      name: true,
+      slug: true,
+      code: true,
+      description: true,
+      shortDescription: true,
+      badge: true
+    },
+    where: and(eq(products.slug, sql.placeholder("slug")), eq(products.status, "published")),
+    with: {
+      images: {
+        columns: { id: true, url: true, alt: true, isPrimary: true },
+        limit: 1,
+        orderBy: (img, { desc }) => [desc(img.isPrimary)]
+      },
+      variants: {
+        columns: {
+          id: true,
+          name: true,
+          sku: true,
+          options: true,
+          stock: true,
+          stockManagement: true,
+          image: true
+        }
+      },
+      categories: {
+        columns: { categoryId: true },
+        with: {
+          category: {
+            columns: { id: true, name: true, slug: true }
+          }
+        }
+      },
+      tags: {
+        columns: { tagId: true },
+        with: {
+          tag: {
+            columns: { id: true, name: true, slug: true }
+          }
+        }
+      },
+      collections: {
+        columns: { collectionId: true },
+        with: {
+          collection: {
+            columns: { id: true, name: true, slug: true, isActive: true }
+          }
+        }
+      }
+    }
+  })
+  .prepare("products_find_by_slug")
+
+type CreateProductInput = {
+  product: ProductInsert
+  variants: Omit<ProductVariantInsert, "productId">[]
+  prices: (Omit<PriceTierInsert, "productId"> & { variantSku?: string })[]
+  categories?: string[]
+  tags?: string[]
+  collections?: string[]
+  images?: (Omit<ProductImageInsert, "productId"> & { variantSku?: string })[]
+}
+
+type UpdateProductInput = {
+  product: Partial<Omit<ProductInsert, "id">>
+  variants?: Partial<ProductVariantInsert>[]
+  prices?: (Omit<PriceTierInsert, "productId"> & { variantSku?: string })[]
+  categories?: string[]
+  tags?: string[]
+  collections?: string[]
+  images?: (Partial<ProductImageInsert> & { variantSku?: string })[]
+}
 
 export class ProductsRepository {
-  async create(product: ProductInsert) {
-    return await db.insert(products).values(product)
+  constructor(private readonly database: typeof db = db) {}
+
+  // TODO add filters
+  async getCatalogProducts(page = 1, limit = 20) {
+    const offset = (page - 1) * limit
+
+    return await this.database.query.products.findMany({
+      where: eq(products.status, "published"),
+      orderBy: [desc(products.createdAt)], // new first
+      limit,
+      offset,
+      with: {
+        images: {
+          columns: { url: true },
+          orderBy: [asc(productImages.isPrimary)]
+        },
+        variants: {
+          columns: { id: true, image: true }
+        }
+      }
+    })
   }
 
-  async createWithFullDetails(
-    productData: ProductInsert,
-    {
+  async createWithFullDetails(dataInput: CreateProductInput) {
+    const {
+      product: productData,
       variants = [],
       prices = [],
       categories: categoryIds = [],
       tags: tagSlugs = [],
       collections: collectionIds = [],
       images = []
-    }: {
-      variants?: Omit<typeof productVariants.$inferInsert, "productId">[]
-      prices?: (Omit<typeof priceTiers.$inferInsert, "productId"> & { sku?: string })[]
-      categories?: string[]
-      tags?: string[]
-      collections?: string[]
-      images?: (Omit<typeof productImages.$inferInsert, "productId"> & { variantSku?: string })[]
-    }
-  ) {
+    } = dataInput
+
     return await db.transaction(async (tx) => {
       // 1. Create Product
-      await tx.insert(products).values(productData)
-      const productId = productData.id!
+      const productId = productData.id || createId()
+      await tx.insert(products).values({ ...productData, id: productId })
 
       // 2. Create Variants
       const variantMap = new Map<string, string>() // sku -> id
-      if (variants.length > 0) {
-        for (const variant of variants) {
-          const vId = variant.id || createId()
-          await tx
-            .insert(productVariants)
-            .values({ ...variant, id: vId, productId } as typeof productVariants.$inferInsert)
-          variantMap.set(variant.sku, vId)
-        }
+      for (const variant of variants) {
+        const vId = variant.id || createId()
+        await tx.insert(productVariants).values({ ...variant, id: vId, productId })
+        variantMap.set(variant.sku, vId)
       }
 
       // 3. Create Prices
       if (prices.length > 0) {
         const pricesToInsert = prices.map((p) => {
-          const { sku, ...priceData } = p
+          const { variantSku, ...priceData } = p
           return {
             ...priceData,
             productId,
-            variantId: sku ? variantMap.get(sku) : null
+            variantId: variantSku ? variantMap.get(variantSku) : null
           }
         })
         await tx.insert(priceTiers).values(pricesToInsert)
@@ -135,25 +228,15 @@ export class ProductsRepository {
     })
   }
 
-  async updateWithFullDetails(
-    productId: string,
-    data: Partial<Omit<typeof products.$inferInsert, "id">> & {
-      variants?: (Partial<typeof productVariants.$inferInsert> & { id?: string })[]
-      prices?: (Omit<typeof priceTiers.$inferInsert, "productId"> & { sku?: string })[]
-      categories?: string[]
-      tags?: string[]
-      collections?: string[]
-      images?: (Partial<typeof productImages.$inferInsert> & { variantSku?: string })[]
-    }
-  ) {
+  async updateWithFullDetails(productId: string, data: UpdateProductInput) {
     const {
+      product: productData,
       variants,
       prices,
       categories: categoryIds,
       tags: tagSlugs,
       collections: collectionIds,
-      images,
-      ...productData
+      images
     } = data
 
     return await db.transaction(async (tx) => {
@@ -165,13 +248,46 @@ export class ProductsRepository {
       // 2. Sync Variants
       const variantMap = new Map<string, string>() // sku -> id
       if (variants) {
+        // A. Obtener IDs de las variantes actuales en la DB
+        const existingVariants = await tx.query.productVariants.findMany({
+          where: eq(productVariants.productId, productId),
+          columns: { id: true, sku: true }
+        })
+
+        // B. Identificar qué variantes mandó el frontend para mantener/crear
+        const inputVariantIds = variants.filter((v) => v.id).map((v) => v.id!)
+
+        // C. Borrar las variantes que están en DB pero NO vinieron en el input
+        const variantsToDelete = existingVariants.filter((v) => !inputVariantIds.includes(v.id))
+        if (variantsToDelete.length > 0) {
+          await tx.delete(productVariants).where(
+            inArray(
+              productVariants.id,
+              variantsToDelete.map((v) => v.id)
+            )
+          )
+        }
+
+        // D. Hacer Upsert de las variantes que llegaron
         // Simple approach: Upsert (insert on duplicate key update if supported, or manually)
         for (const variant of variants) {
           const vId = variant.id || createId()
+
+          // Si es una creación, requerimos campos obligatorios (sku, name, options)
+          // Asumimos que el schema de validación ya forzó esto.
           await tx
             .insert(productVariants)
-            .values({ ...variant, id: vId, productId } as typeof productVariants.$inferInsert)
-            .onDuplicateKeyUpdate({
+            .values({
+              ...variant,
+              id: vId,
+              productId,
+              // Proveer defaults seguros si faltan en un insert
+              sku: variant.sku || `SKU-${vId.slice(0, 8)}`,
+              name: variant.name || "Única",
+              options: variant.options || {}
+            })
+            .onConflictDoUpdate({
+              target: [productVariants.id],
               set: {
                 name: variant.name,
                 sku: variant.sku,
@@ -181,31 +297,33 @@ export class ProductsRepository {
                 image: variant.image
               }
             })
+
           if (variant.sku) variantMap.set(variant.sku, vId)
+        }
+      } else {
+        // Si no mandaron variants, igual necesitamos llenar el variantMap
+        // por si están actualizando prices/images que dependen del SKU.
+        if (prices?.some((p) => p.variantSku) || images?.some((i) => i.variantSku)) {
+          const currentVariants = await tx.query.productVariants.findMany({
+            where: eq(productVariants.productId, productId)
+          })
+          for (const v of currentVariants) {
+            variantMap.set(v.sku, v.id)
+          }
         }
       }
 
       // 3. Sync Prices
       if (prices) {
-        // If we don't have variantMap populated (because variants weren't passed), we might need to fetch them
-        if (prices.some((p) => p.sku) && variantMap.size === 0) {
-          const productVariantsList = await tx.query.productVariants.findMany({
-            where: eq(productVariants.productId, productId)
-          })
-          for (const v of productVariantsList) {
-            variantMap.set(v.sku, v.id)
-          }
-        }
-
         // Delete old prices and insert new ones
         await tx.delete(priceTiers).where(eq(priceTiers.productId, productId))
         if (prices.length > 0) {
           const pricesToInsert = prices.map((p) => {
-            const { sku, ...priceData } = p
+            const { variantSku, ...priceData } = p
             return {
               ...priceData,
               productId,
-              variantId: sku ? variantMap.get(sku) : null
+              variantId: variantSku ? variantMap.get(variantSku) : null
             }
           })
           await tx.insert(priceTiers).values(pricesToInsert as (typeof priceTiers.$inferInsert)[])
@@ -276,9 +394,7 @@ export class ProductsRepository {
               variantId: variantSku ? variantMap.get(variantSku) : img.variantId || null
             }
           })
-          await tx
-            .insert(productImages)
-            .values(imagesToInsert as (typeof productImages.$inferInsert)[])
+          await tx.insert(productImages).values(imagesToInsert as ProductImageInsert[]) // TODO testear
         }
       }
 
@@ -286,52 +402,71 @@ export class ProductsRepository {
     })
   }
 
-  async update(id: string, product: Partial<ProductInsert>) {
-    return await db.update(products).set(product).where(eq(products.id, id))
-  }
   async delete(id: string) {
     return await db.delete(products).where(eq(products.id, id))
   }
-  async findAll({ includeInactive = false } = {}) {
-    const conditions = []
-    if (!includeInactive) conditions.push(eq(products.status, "published"))
-    return await db.query.products.findMany({ where: and(...conditions) })
-  }
 
-  async findBySlug(slug: string) {
-    return await db.query.products.findFirst({
-      where: and(eq(products.slug, slug), eq(products.status, "published"))
-    })
-  }
-  /**
-   * Obtiene la variante con sus opciones (para mostrar "Rojo / M")
-   */
-  async findVariantById(variantId: string, { includeProduct = false } = {}) {
-    const variant = await db.query.productVariants.findFirst({
+  async findAll() {
+    return await db.query.products.findMany({
       columns: {
         id: true,
         name: true,
-        sku: true,
-        options: true,
-        productId: true
+        slug: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true
       },
       with: {
-        product: includeProduct
-          ? {
-              columns: {
-                id: true,
-                name: true,
-                sku: true,
-                purchaseRules: true,
-                status: true
-              }
+        images: {
+          columns: { id: true, url: true, alt: true, isPrimary: true },
+          limit: 1,
+          orderBy: (img, { desc }) => [desc(img.isPrimary)]
+        },
+        variants: {
+          columns: {
+            id: true,
+            name: true,
+            sku: true,
+            options: true,
+            stock: true,
+            stockManagement: true,
+            image: true
+          }
+        },
+        categories: {
+          columns: { categoryId: true },
+          with: {
+            category: {
+              columns: { id: true, name: true, slug: true }
             }
-          : undefined
-      },
-      where: eq(productVariants.id, variantId)
+          }
+        }
+      }
     })
+  }
 
-    return variant || null
+  async findBySlug(slug: string) {
+    const product = await findProductBySlugQuery.execute({ slug })
+
+    if (!product) return null
+
+    // Filter out inactive collections
+    const activeCollections = product.collections.filter((pc) => pc.collection.isActive)
+
+    return {
+      ...product,
+      collections: activeCollections
+    }
+  }
+
+  /**
+   * Fast query to check multiple properties of a product
+   */
+  async findProductChecking(productId: string, properties: (keyof Product)[]) {
+    return await db.query.products.findFirst({
+      columns: { id: true },
+      where: and(eq(products.id, productId), ...properties.map((prop) => eq(products[prop], true)))
+    })
   }
 
   /**
@@ -352,7 +487,6 @@ export class ProductsRepository {
       columns: {
         id: true,
         name: true,
-        sku: true,
         purchaseRules: true,
         status: true
       },
@@ -395,7 +529,6 @@ export class ProductsRepository {
       // columns: {
       //   id: true,
       //   name: true,
-      //   sku: true,
       //   purchaseRules: true,
       //   status: true,
       //   badge: true,
@@ -447,7 +580,7 @@ export class ProductsRepository {
     userTier: string
   }) {
     return await db.query.products.findFirst({
-      columns: { id: true, name: true, sku: true, purchaseRules: true },
+      columns: { id: true, name: true, purchaseRules: true },
       with: {
         variants: variantId
           ? {
@@ -475,41 +608,78 @@ export class ProductsRepository {
   }
 
   /**
+   * Obtiene variantes y su producto padre en una sola consulta.
+   * Retorna MAPA: { [variantId]: VariantWithProduct }
+   */
+  async findVariantsWithProductParent(variantIds: string[]) {
+    if (variantIds.length === 0) return {}
+
+    const results = await db.query.productVariants.findMany({
+      where: inArray(productVariants.id, variantIds),
+      with: {
+        product: {
+          columns: {
+            id: true,
+            name: true,
+            purchaseRules: true
+            // agregar cualquier otra columna del producto que se necesite en la orden
+          },
+          with: {
+            images: {
+              columns: { id: true, url: true, isPrimary: true },
+              limit: 1,
+              orderBy: (img, { desc }) => [desc(img.isPrimary)]
+            }
+          }
+        }
+      }
+    })
+
+    // Convertimos el array en un Record para lookup O(1)
+    return results.reduce(
+      (acc, variant) => {
+        acc[variant.id] = variant
+        return acc
+      },
+      {} as Record<string, (typeof results)[number]>
+    )
+  }
+
+  /**
    * Fetch múltiple de productos activos (para snapshot de order)
    * Retorna MAPA: { [productId]: ProductSummary } para lookup O(1)
    */
-  async findActiveProductsByIds(productIds: string[]): Promise<Record<string, ProductSummary>> {
-    if (productIds.length === 0) return {}
+  // async findActiveProductsByIds(productIds: string[]): Promise<Record<string, ProductSummary>> {
+  //   if (productIds.length === 0) return {}
 
-    const rows = await db.query.products.findMany({
-      columns: {
-        id: true,
-        name: true,
-        sku: true,
-        purchaseRules: true,
-        status: true
-      },
-      with: {
-        images: {
-          columns: { id: true, url: true, alt: true, isPrimary: true },
-          limit: 1,
-          orderBy: (img, { desc }) => [desc(img.isPrimary)]
-        }
-      },
-      where: and(inArray(products.id, productIds), eq(products.status, "published"))
-    })
+  //   const rows = await db.query.products.findMany({
+  //     columns: {
+  //       id: true,
+  //       name: true,
+  //       purchaseRules: true,
+  //       status: true
+  //     },
+  //     with: {
+  //       images: {
+  //         columns: { id: true, url: true, alt: true, isPrimary: true },
+  //         limit: 1,
+  //         orderBy: (img, { desc }) => [desc(img.isPrimary)]
+  //       }
+  //     },
+  //     where: and(inArray(products.id, productIds), eq(products.status, "published"))
+  //   })
 
-    return rows.reduce(
-      (acc, row) => {
-        acc[row.id] = {
-          ...row,
-          images: row.images ?? []
-        }
-        return acc
-      },
-      {} as Record<string, ProductSummary>
-    )
-  }
+  //   return rows.reduce(
+  //     (acc, row) => {
+  //       acc[row.id] = {
+  //         ...row,
+  //         images: row.images ?? []
+  //       }
+  //       return acc
+  //     },
+  //     {} as Record<string, ProductSummary>
+  //   )
+  // }
 
   /**
    * Fetch múltiple de variantes por IDs
@@ -520,39 +690,39 @@ export class ProductsRepository {
    * Ahora: { "a": { id: "a", ... }, "b": { id: "b", ... } }
    * const variant = variantsMap[item.variantId] // Directo, sin .find()
    */
-  async findVariantsByIds(variantIds: string[]): Promise<
-    Record<
-      string,
-      {
-        id: string
-        productId: string
-        name: string
-        sku: string
-        image: string | null
-      }
-    >
-  > {
-    if (variantIds.length === 0) return {}
+  // async findVariantsByIds(variantIds: string[]): Promise<
+  //   Record<
+  //     string,
+  //     {
+  //       id: string
+  //       productId: string
+  //       name: string
+  //       sku: string
+  //       image: string | null
+  //     }
+  //   >
+  // > {
+  //   if (variantIds.length === 0) return {}
 
-    const results = await db
-      .select({
-        id: productVariants.id,
-        productId: productVariants.productId,
-        name: productVariants.name,
-        sku: productVariants.sku,
-        image: productVariants.image
-      })
-      .from(productVariants)
-      .where(inArray(productVariants.id, variantIds))
+  //   const results = await db
+  //     .select({
+  //       id: productVariants.id,
+  //       productId: productVariants.productId,
+  //       name: productVariants.name,
+  //       sku: productVariants.sku,
+  //       image: productVariants.image
+  //     })
+  //     .from(productVariants)
+  //     .where(inArray(productVariants.id, variantIds))
 
-    return results.reduce(
-      (acc, variant) => {
-        acc[variant.id] = variant
-        return acc
-      },
-      {} as Record<string, (typeof results)[number]>
-    )
-  }
+  //   return results.reduce(
+  //     (acc, variant) => {
+  //       acc[variant.id] = variant
+  //       return acc
+  //     },
+  //     {} as Record<string, (typeof results)[number]>
+  //   )
+  // }
 
   // ─────────────────────────────────────────────────────────
   // Helpers específicos para variantes
@@ -560,31 +730,70 @@ export class ProductsRepository {
 
   /**
    * Obtiene variante con datos del producto padre (para validaciones)
-   * ej: Cuando necesitás validar que una variante pertenece a un producto publicado.
+   * ej: Cuando se necesita validar que una variante pertenece a un producto publicado.
    * ej: Útil para addOrderItem cuando el admin fuerza una variante específica.
    */
   async findVariantWithProduct(variantId: string) {
-    const [result] = await db
-      .select({
-        variant: {
-          id: productVariants.id,
-          name: productVariants.name,
-          sku: productVariants.sku,
-          options: productVariants.options
-        },
+    const variant = await this.database.query.productVariants.findFirst({
+      columns: {
+        id: true,
+        name: true,
+        sku: true,
+        options: true
+      },
+      with: {
         product: {
-          id: products.id,
-          name: products.name,
-          sku: products.sku,
-          purchaseRules: products.purchaseRules,
-          status: products.status
+          columns: {
+            id: true,
+            name: true,
+            purchaseRules: true,
+            status: true
+          }
         }
-      })
-      .from(productVariants)
-      .innerJoin(products, eq(productVariants.productId, products.id))
-      .where(eq(productVariants.id, variantId))
+      },
+      where: eq(productVariants.id, variantId)
+    })
 
-    return result ? { ...result.variant, product: result.product } : null
+    return variant
+  }
+
+  /**
+   * Obtiene las reglas de compra del producto o variante
+   * Útil para calcular precios dinámicos.
+   * Jerarquía:
+   * 1. Reglas por tier (no implementado)
+   * 2. Reglas de la variante
+   * 3. Reglas del producto
+   * 4. Reglas por defecto
+   */
+  async getResolvedPurchaseRules(variantId: string): Promise<PurchaseRule | null> {
+    // 1. variante con su producto padre
+    const variant = await this.database.query.productVariants.findFirst({
+      where: eq(productVariants.id, variantId),
+      columns: { purchaseRules: true },
+      with: {
+        product: {
+          columns: { purchaseRules: true }
+        }
+      }
+    })
+    if (!variant) return null
+
+    // 2. reglas por defecto base
+    const defaultRules: PurchaseRule = {
+      minQuantity: 1,
+      maxQuantity: undefined,
+      stepQuantity: 1,
+      unitName: "unidades"
+    }
+
+    // 3. Fusion: Default se pisa con Producto, Producto se pisa con Variante
+    // Si variant.purchaseRules es null/undefined, el spread operator {} lo ignora.
+    return {
+      ...defaultRules,
+      ...(variant.product?.purchaseRules || {}),
+      ...(variant.purchaseRules || {})
+    } // as PurchaseRule
   }
 }
 

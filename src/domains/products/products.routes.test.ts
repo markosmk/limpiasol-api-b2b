@@ -5,7 +5,7 @@ import { createTestApp } from "#test/utils/test-app"
 import { db, setupTestDB, teardownTestDB } from "#test/utils/test-db"
 import type { FastifyInstance } from "fastify"
 
-import { priceTiers, products, productVariants } from "@/db/schema"
+import { priceTiers, productImages, products, productVariants } from "@/db/pg"
 import productsRoutes from "@/domains/products/products.routes"
 
 async function cleanPricingTables() {
@@ -48,7 +48,7 @@ describe("POST /products/:productId/price", () => {
         status: "published",
         purchaseRules: { minQuantity: 5, stepQuantity: 5, maxQuantity: 100 }
       })
-      .$returningId()
+      .returning({ id: products.id })
     if (!productTestId) throw new Error("Failed to create test product")
     const productTest = await db.query.products.findFirst({
       where: eq(products.id, productTestId)
@@ -66,7 +66,7 @@ describe("POST /products/:productId/price", () => {
         sku: `PREM-${Date.now()}`,
         options: { Tipo: "Premium" }
       })
-      .$returningId()
+      .returning({ id: productVariants.id })
     if (!variantTestAId) throw new Error("Failed to create test variant")
     const variantTest = await db.query.productVariants.findFirst({
       where: eq(productVariants.id, variantTestAId)
@@ -472,7 +472,7 @@ describe("POST /products/admin", () => {
         slug: "actualizar-me",
         status: "draft"
       })
-      .$returningId()
+      .returning({ id: products.id })
 
     // 2. Actualizarlo
     const response = await app.inject({
@@ -491,6 +491,205 @@ describe("POST /products/admin", () => {
     expect(response.statusCode).toBe(200)
     const body = response.json()
     expect(body.data.product.name).toBe("Producto Actualizado")
+  })
+
+  it("UPDATE CRITICAL - crea un producto sin variantes y auto-genera la variante por defecto (Modo Shopify)", async () => {
+    const { sessionId } = await createTestUserAndSession("admin")
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/products/admin`,
+      cookies: { session: sessionId },
+      payload: {
+        product: {
+          name: "Silla de Oficina",
+          slug: "silla-oficina",
+          status: "published",
+          // NOTA: No enviamos 'variants' intencionalmente
+          prices: [{ tierType: "retail", price: 50000 }]
+        }
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+
+    // 1. Verificamos la respuesta de la API
+    expect(body.data.product.variants).toBeDefined()
+    expect(body.data.product.variants.length).toBe(1)
+    expect(body.data.product.variants[0].name).toBe("Única")
+    expect(body.data.product.variants[0].sku).toMatch(/^SKU-/)
+
+    // 2. Verificamos la Base de Datos Real
+    const dbVariants = await db.query.productVariants.findMany({
+      where: eq(productVariants.productId, body.data.product.id)
+    })
+    expect(dbVariants).toHaveLength(1)
+
+    // 3. Verificamos que el precio general se haya guardado sin atarse a ninguna variante (variantId = null)
+    const dbPrices = await db.query.priceTiers.findMany({
+      where: eq(priceTiers.productId, body.data.product.id)
+    })
+    expect(dbPrices[0].variantId).toBeNull()
+  })
+
+  it("UPDATE CRITICAL - evita que un producto se quede sin variantes al intentar borrarlas todas (variants: [])", async () => {
+    const { sessionId } = await createTestUserAndSession("admin")
+
+    // 1. Creamos el producto inicial manualmente en la DB
+    const [{ id: productId }] = await db
+      .insert(products)
+      .values({
+        name: "Producto con Variante",
+        slug: "prod-variante"
+      })
+      .returning({ id: products.id })
+
+    await db.insert(productVariants).values({
+      id: "var_1",
+      productId,
+      name: "Original",
+      sku: "ORIGINAL-1",
+      options: { Tipo: "Original" }
+    })
+
+    // 2. Intentamos vaciar las variantes enviando un array vacío
+    const response = await app.inject({
+      method: "PUT",
+      url: `/products/admin/${productId}`,
+      cookies: { session: sessionId },
+      payload: {
+        product: {
+          variants: [] // El array vacío indica "borrar todo"
+        }
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+
+    // 3. Verificamos en BD que no se quedó huérfano (debió inyectar la variante por defecto)
+    const currentVariants = await db.query.productVariants.findMany({
+      where: eq(productVariants.productId, productId)
+    })
+
+    expect(currentVariants.length).toBe(1)
+    expect(currentVariants[0].name).toBe("Única") // Reemplazó "Original" por la default
+  })
+
+  it("UPDATE CRITICAL - actualiza variantes y mantiene/enlaza correctamente los precios e imágenes a través del SKU", async () => {
+    const { sessionId } = await createTestUserAndSession("admin")
+
+    // 1. Creamos producto y 2 variantes iniciales
+    const [{ id: productId }] = await db
+      .insert(products)
+      .values({
+        name: "Zapatillas",
+        slug: "zapatillas-1"
+      })
+      .returning({ id: products.id })
+
+    await db.insert(productVariants).values([
+      { id: "var_roja", productId, name: "Roja", sku: "ZAP-ROJA", options: {} },
+      { id: "var_azul", productId, name: "Azul", sku: "ZAP-AZUL", options: {} }
+    ])
+
+    // 2. Actualizamos, enviamos precios e imágenes atados a los SKUs
+    const response = await app.inject({
+      method: "PUT",
+      url: `/products/admin/${productId}`,
+      cookies: { session: sessionId },
+      payload: {
+        product: {
+          // Re-enviamos las variantes para no borrarlas
+          variants: [
+            { id: "var_roja", name: "Roja Editada", sku: "ZAP-ROJA", options: {} },
+            { id: "var_azul", name: "Azul", sku: "ZAP-AZUL", options: {} }
+          ],
+          prices: [
+            { tierType: "retail", price: 100, variantSku: "ZAP-ROJA" }, // Atado a la roja
+            { tierType: "wholesale", price: 80 } // General (aplica a todo)
+          ],
+          images: [
+            { url: "roja.jpg", variantSku: "ZAP-ROJA" }, // Atado a la roja
+            { url: "azul.jpg", variantSku: "ZAP-AZUL" } // Atado a la azul
+          ]
+        }
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+
+    // 3. Verificamos los Precios en la BD
+    const currentPrices = await db.query.priceTiers.findMany({
+      where: eq(priceTiers.productId, productId)
+    })
+
+    expect(currentPrices).toHaveLength(2)
+    const precioRojo = currentPrices.find((p) => p.tierType === "retail")
+    const precioGeneral = currentPrices.find((p) => p.tierType === "wholesale")
+
+    expect(precioRojo?.variantId).toBe("var_roja") // Enlazó correctamente el ID
+    expect(precioGeneral?.variantId).toBeNull() // Se mantuvo general
+
+    // 4. Verificamos las Imágenes en la BD
+    const currentImages = await db.query.productImages.findMany({
+      where: eq(productImages.productId, productId)
+    })
+
+    expect(currentImages).toHaveLength(2)
+    const imgRoja = currentImages.find((i) => i.url === "roja.jpg")
+    expect(imgRoja?.variantId).toBe("var_roja")
+  })
+
+  it("UPDATE CRITICAL - mantiene intactas las variantes y precios si no se envían en el payload (Partial Update)", async () => {
+    const { sessionId } = await createTestUserAndSession("admin")
+
+    const [{ id: productId }] = await db
+      .insert(products)
+      .values({
+        name: "Producto Intacto",
+        slug: "prod-intacto"
+      })
+      .returning({ id: products.id })
+
+    await db.insert(productVariants).values({
+      id: "var_1",
+      productId,
+      name: "Variante Intacta",
+      sku: "INTACTO-1",
+      options: {}
+    })
+
+    await db.insert(priceTiers).values({
+      productId,
+      tierType: "retail",
+      price: "100.00"
+    })
+
+    // Act: Hacemos un PUT solo con el nombre (variants y prices están undefined)
+    const response = await app.inject({
+      method: "PUT",
+      url: `/products/admin/${productId}`,
+      cookies: { session: sessionId },
+      payload: {
+        product: {
+          name: "Producto Modificado"
+        }
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+
+    // Assert: Verificamos que la DB no borró la variante ni el precio
+    const variantsInDb = await db.query.productVariants.findMany({
+      where: eq(productVariants.productId, productId)
+    })
+    const pricesInDb = await db.query.priceTiers.findMany({
+      where: eq(priceTiers.productId, productId)
+    })
+
+    expect(variantsInDb).toHaveLength(1)
+    expect(pricesInDb).toHaveLength(1)
   })
 
   it("rechaza acceso a usuario no administrador (reseller)", async () => {
@@ -518,7 +717,7 @@ describe("POST /products/admin", () => {
         slug: "borrame",
         status: "draft"
       })
-      .$returningId()
+      .returning({ id: products.id })
 
     const response = await app.inject({
       method: "DELETE",

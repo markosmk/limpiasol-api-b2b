@@ -2,7 +2,7 @@ export type UserTier = "retail" | "wholesale" | "reseller" | "vip"
 
 export type PricingContext = {
   productId: string
-  variantId?: string | null
+  variantId: string
   userTier: UserTier
   quantity: number
 }
@@ -13,7 +13,7 @@ export type PricingResult = {
   appliedTier: UserTier
   finalSubtotal: number
   currency: string
-  minQuantity: number
+  // minQuantity: number
   volumeDiscount?: { quantity: number; discountPercent: number }
   hasDiscount: boolean
   discountPercent: number

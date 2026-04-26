@@ -1,6 +1,7 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: <explanation > */
 
 import * as v from "valibot"
+import { productsCatalogService } from "./catalog/catalog.service"
 import { getTierFromRole } from "./lib/pricing.utils"
 import { productsPricingService } from "./pricing/pricing.service"
 import { createProductSchema, updateProductSchema } from "./products.schema"
@@ -15,9 +16,44 @@ export default async function productsRoutes(app: FastifyInstance) {
   // ─────────────────────────────────────
   // FRONTEND ROUTES (Catalog / Client)
   // ─────────────────────────────────────
-  app.get("/", async (_request, reply) => {
-    reply.send({ success: true, data: [] })
-  })
+  app.get(
+    "/",
+    {
+      schema: {
+        querystring: v.object({
+          page: v.optional(v.pipe(v.string(), v.transform(Number))),
+          limit: v.optional(v.pipe(v.string(), v.transform(Number)))
+        })
+      },
+      preHandler: optionalAuth // Ojo: auth opcional para saber si es guest o logueado
+    },
+    async (request, reply) => {
+      const query = request.query as { page?: number; limit?: number }
+      const page = query.page && query.page > 0 ? query.page : 1
+      const limit = query.limit && query.limit > 0 ? query.limit : 20
+
+      const user = request.user
+      const userTier = user ? getTierFromRole(user.role) : "retail"
+      const isAuthenticated = !!user
+
+      const productsList = await productsCatalogService.getCatalogList(
+        userTier,
+        isAuthenticated,
+        page,
+        limit
+      )
+
+      return reply.send({
+        success: true,
+        data: productsList,
+        meta: {
+          page,
+          limit
+          // A futuro podrías agregar un count total para la paginación real
+        }
+      })
+    }
+  )
 
   app.get("/:slug", async (request, reply) => {
     const { slug } = request.params as { slug: string }
@@ -25,20 +61,10 @@ export default async function productsRoutes(app: FastifyInstance) {
     if (!product) {
       return reply.code(404).send({ success: false, error: "Producto no encontrado" })
     }
-    const displayPrice = await productsPricingService.getDisplayPrice(product.id)
 
     return {
       success: true,
-      data: {
-        product,
-        pricing: {
-          base: displayPrice,
-          note:
-            displayPrice.minQuantity > 1
-              ? `Precio por unidad (mín. ${displayPrice.minQuantity})`
-              : "Precio por unidad"
-        }
-      }
+      data: { product }
     }
   })
 
@@ -60,72 +86,130 @@ export default async function productsRoutes(app: FastifyInstance) {
    * Muestra: "Subtotal: $2000 (ahorraste 15% por volumen)"
    *
    */
-  app.post("/:productId/price", { preHandler: optionalAuth }, async (request, reply) => {
-    const { productId } = request.params as { productId: string }
-    const { variantId, quantity } = request.body as {
-      variantId?: string
-      quantity: number
-    }
+  /**
+   * GET /:productId/price?variantId=xyz&quantity=10
+   * * En producto detalle (frontend):
+   * const res = await api.get(`/products/${id}/price?variantId=${variantId}&quantity=1`)
+   * * En carrito (frontend):
+   * const res = await api.get(`/products/${id}/price?variantId=${variantId}&quantity=25`)
+   */
+  app.get(
+    "/:productId/price",
+    {
+      schema: {
+        querystring: v.object({
+          variantId: v.pipe(v.string(), v.cuid2()),
+          quantity: v.optional(v.pipe(v.string(), v.transform(Number)))
+        })
+      },
+      preHandler: optionalAuth
+    },
+    async (request, reply) => {
+      const { productId } = request.params as { productId: string }
+      // Obtenemos los datos de la query. Todo llega como string.
+      const { variantId, quantity: rawQuantity } = request.query as {
+        variantId?: string
+        quantity?: string
+      }
 
-    if (!quantity || quantity < 1) {
-      return reply.code(400).send({
-        success: false,
-        error: "Cantidad inválida",
-        suggestion: "La cantidad debe ser mayor a 0"
-      })
-    }
-
-    const user = request.user
-    const userTier = user ? getTierFromRole(user.role) : "retail"
-
-    try {
-      const validation = await productsPricingService.validateQuantity(
-        productId,
-        quantity,
-        variantId
-      )
-      if (!validation.valid) {
-        return reply.code(validation.code === "not_found" ? 404 : 400).send({
+      if (!variantId) {
+        return reply.code(400).send({
           success: false,
-          error: validation.error,
-          suggestion: validation.suggestion,
-          code: validation.code
+          error: "Falta la variante",
+          suggestion: "Debes proveer un variantId en la URL"
         })
       }
 
-      const pricing = await productsPricingService.calculatePrice({
-        productId,
-        variantId,
-        userTier,
-        quantity
-      })
+      // Parseamos la cantidad (si no la envían, asumimos 1 por defecto)
+      const quantity = rawQuantity ? parseInt(rawQuantity, 10) : 1
+      if (Number.isNaN(quantity) || quantity < 1) {
+        return reply.code(400).send({
+          success: false,
+          error: "Cantidad inválida",
+          suggestion: "La cantidad debe ser un número mayor a 0"
+        })
+      }
 
-      return {
-        success: true,
-        data: {
-          productId,
-          variantId,
-          quantity,
-          pricing,
-          userTier
+      const user = request.user
+      const userTier = user ? getTierFromRole(user.role) : "retail"
+      const isAuthenticated = !!user
+
+      // Control de acceso al precio
+      if (!isAuthenticated) {
+        // Necesitamos saber si este producto permite ver precios al público
+        const isPricePublic = await productsService.isProductWithPricePublic(productId)
+        if (!isPricePublic) {
+          return reply.code(403).send({
+            success: false,
+            error: "Precio oculto",
+            suggestion: "Debes iniciar sesión para ver los precios y comprar este producto."
+          })
         }
       }
-    } catch (error: any) {
-      if (error.code === "price_not_found") {
-        return reply.code(404).send({
+
+      try {
+        const validation = await productsPricingService.validateQuantity(quantity, variantId)
+        if (!validation.valid) {
+          // error Code ORDER_INVALID_QUANTITY
+          return reply.code(validation.code === "not_found" ? 404 : 400).send({
+            success: false,
+            error: validation.error,
+            suggestion: validation.suggestion,
+            code: validation.code
+          })
+        }
+
+        const pricing = await productsPricingService.calculatePrice({
+          productId,
+          variantId,
+          userTier,
+          quantity
+        })
+
+        return {
+          success: true,
+          data: {
+            productId,
+            variantId,
+            quantity,
+            pricing,
+            userTier
+          }
+        }
+      } catch (error: any) {
+        if (error.code === "price_not_found" || error.code === "NOT_FOUND") {
+          return reply.code(404).send({
+            success: false,
+            error: "Precio no disponible",
+            message: error.message
+          })
+        }
+
+        request.log.error({ error, productId, variantId }, "Price calculation failed")
+        return reply.code(500).send({
           success: false,
-          error: "Precio no disponible",
-          message: error.message
+          error: "Error interno al calcular precio,",
+          message: process.env.NODE_ENV === "test" ? error.message : undefined
         })
       }
-
-      request.log.error({ error, productId, variantId }, "Price calculation failed")
-      return reply.code(500).send({
-        success: false,
-        error: "Error interno al calcular precio,",
-        message: process.env.NODE_ENV === "test" ? error.message : undefined
-      })
     }
+  )
+
+  /**
+   * Obtiene todas las opciones de precio para mostrar en UI, ideal para tabla de descuentos por volumen por tier
+   *
+   * Ejemplo:
+   * 1 - 9 unidades: $100
+   * 10 - 49 unidades: $90
+   * 50+ unidades: $80
+   */
+  app.get("/:productId/prices", { preHandler: [optionalAuth] }, async (request, _reply) => {
+    const { productId } = request.params as { productId: string }
+    const { variantId } = request.query as { variantId?: string }
+    const user = request.user
+    const userTier = user ? getTierFromRole(user.role) : "retail"
+    const options = await productsPricingService.getPriceOptions(productId, variantId, userTier)
+    return { success: true, data: { options } }
   })
 
   // ─────────────────────────────────────
@@ -147,58 +231,36 @@ export default async function productsRoutes(app: FastifyInstance) {
       if (!product) {
         return reply.code(404).send({ success: false, error: "Producto no encontrado" })
       }
-      const displayPrice = await productsPricingService.getDisplayPrice(productId)
 
       return {
         success: true,
-        data: {
-          product,
-          pricing: {
-            base: displayPrice,
-            note:
-              displayPrice.minQuantity > 1
-                ? `Precio por unidad (mín. ${displayPrice.minQuantity})`
-                : "Precio por unidad"
-          }
-        }
+        data: { product }
       }
     }
   )
 
-  app.post(
-    "/admin",
-    { preHandler: [requireAuth, requireRole(["admin"])] },
-    async (request, reply) => {
-      const result = v.safeParse(createProductSchema, (request.body as any).product)
-      if (!result.success) {
-        return reply.code(400).send({
-          success: false,
-          error: "Datos de producto inválidos",
-          details: v.flatten(result.issues).nested
-        })
-      }
-
-      const newProduct = await productsService.createProduct(result.output)
-      return { success: true, data: { product: newProduct } }
-    }
-  )
+  app.post("/admin", { preHandler: [requireAuth, requireRole(["admin"])] }, async (request) => {
+    const result = v.parse(createProductSchema, (request.body as any).product)
+    const newProduct = await productsService.createProduct(result)
+    return { success: true, data: { product: newProduct } }
+  })
 
   app.put(
     "/admin/:productId",
     { preHandler: [requireAuth, requireRole(["admin"])] },
-    async (request, reply) => {
+    async (request) => {
       const { productId } = request.params as { productId: string }
-      const result = v.safeParse(updateProductSchema, (request.body as any).product)
+      const result = v.parse(updateProductSchema, (request.body as any).product)
 
-      if (!result.success) {
-        return reply.code(400).send({
-          success: false,
-          error: "Datos de actualización inválidos",
-          details: v.flatten(result.issues).nested
-        })
-      }
+      // if (!result.success) {
+      //   return reply.code(400).send({
+      //     success: false,
+      //     error: "Datos de actualización inválidos",
+      //     details: v.flatten(result.issues).nested
+      //   })
+      // }
 
-      const updatedProduct = await productsService.updateProduct(productId, result.output)
+      const updatedProduct = await productsService.updateProduct(productId, result)
       return { success: true, data: { product: updatedProduct } }
     }
   )
@@ -213,11 +275,17 @@ export default async function productsRoutes(app: FastifyInstance) {
     }
   )
 
-  // opciones de precio (para mostrar en catálogo/admin)
-  app.get("/:productId/prices", async (request, _reply) => {
-    const { productId } = request.params as { productId: string }
-    const { variantId } = request.query as { variantId?: string }
-    const options = await productsPricingService.getPriceOptions(productId, variantId)
-    return { success: true, data: { options } }
-  })
+  /**
+   * Obtiene todas las opciones de precio para el panel admin, completar inputs y editar.
+   */
+  app.get(
+    "admin/:productId/prices",
+    { preHandler: [requireAuth, requireRole(["admin"])] },
+    async (request) => {
+      const { productId } = request.params as { productId: string }
+      const { variantId } = request.query as { variantId?: string }
+      const options = await productsPricingService.getPriceOptions(productId, variantId)
+      return { success: true, data: { options } }
+    }
+  )
 }
