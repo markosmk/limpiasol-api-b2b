@@ -1,0 +1,207 @@
+paths:
+  /users:
+    get:
+      summary: Listar todos los usuarios
+      description: Obtiene una lista paginada de todos los usuarios del sistema. Permite filtrar por estado o rol.
+      tags:
+        - Users (Admin)
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: role
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        email:
+                          type: string
+                        name:
+                          type: string
+                        role:
+                          type: string
+                        status:
+                          type: string
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+        '403':
+          description: Acceso denegado (requiere rol de administrador)
+          content:
+            application/json:
+              schema:
+                $ref: '../openapi.base.yaml#/components/schemas/Error'
+
+  /users/{id}:
+    get:
+      summary: Obtener usuario por ID
+      description: Devuelve la información completa de un usuario específico.
+      tags:
+        - Users (Admin)
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalles del usuario
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+        '404':
+          $ref: '../openapi.base.yaml#/components/responses/Error'
+
+    delete:
+      summary: Eliminar usuario
+      description: Elimina (soft delete o permanente, según implementación) a un usuario del sistema. Un admin no puede eliminarse a sí mismo.
+      tags:
+        - Users (Admin)
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Usuario eliminado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          $ref: '../openapi.base.yaml#/components/responses/Error'
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+
+  /users/{id}/status:
+    patch:
+      summary: Actualizar estado de usuario
+      description: Permite a un administrador cambiar el estado de un usuario (ej. activarlo, suspenderlo, rechazarlo).
+      tags:
+        - Users (Admin)
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [pending_approval, active, rejected, suspended]
+                reason:
+                  type: string
+                  description: Motivo de la suspensión o rechazo
+      responses:
+        '200':
+          description: Estado actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          $ref: '../openapi.base.yaml#/components/responses/Error'
+
+  /users/{id}/role:
+    patch:
+      summary: Actualizar rol de usuario
+      description: Permite a un administrador cambiar el rol de un usuario (ej. promover un cliente 'user' a 'reseller').
+      tags:
+        - Users (Admin)
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+              properties:
+                role:
+                  type: string
+                  enum: [user, reseller, admin]
+                adminLevel:
+                  type: string
+                  description: Opcional. Nivel de acceso si el rol asignado es admin.
+      responses:
+        '200':
+          description: Rol actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          $ref: '../openapi.base.yaml#/components/responses/Error'

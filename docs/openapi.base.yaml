@@ -25,6 +25,12 @@ tags:
     description: Gestión de pedidos para clientes.
   - name: Auth
     description: Autenticación y gestión de sesiones.
+  - name: Account
+    description: Perfil y configuración del usuario actual.
+  - name: Carts
+    description: Gestión del carrito de compras.
+  - name: Users (Admin)
+    description: Gestión administrativa de usuarios.
   - name: Admin - Products
     description: Gestión administrativa de catálogo (CRUD completo).
   - name: Admin - Categories
@@ -81,6 +87,24 @@ components:
         limit: { type: integer, minimum: 1, maximum: 100, default: 20, example: 20 }
 
   responses:
+    Error:
+      description: Error general de negocio o validación.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          
+    400BadRequest:
+      description: Error de validación en la solicitud.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+    404NotFound:
+      description: Recurso no encontrado.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          
     401Unauthorized:
       description: No autenticado. Sesión expirada o inexistente.
       content:

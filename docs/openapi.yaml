@@ -1,5 +1,11 @@
 components:
   responses:
+    400BadRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: Error de validación en la solicitud.
     401Unauthorized:
       content:
         application/json:
@@ -12,12 +18,24 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
       description: No autorizado. El usuario no tiene el rol necesario.
+    404NotFound:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: Recurso no encontrado.
     500InternalServerError:
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
       description: Error interno del servidor.
+    Error:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: Error general de negocio o validación.
   schemas:
     Address:
       properties:
@@ -437,6 +455,195 @@ info:
   version: 1.0.0
 openapi: 3.1.0
 paths:
+  /account/me:
+    get:
+      description: Devuelve la información completa del perfil del usuario autenticado.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  email:
+                    type: string
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  phone:
+                    type: string
+                  role:
+                    type: string
+                  status:
+                    type: string
+                type: object
+          description: Perfil del usuario
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Obtener perfil del usuario actual
+      tags:
+        - Account
+    patch:
+      description: Actualiza los datos del usuario actual (nombre, teléfono, etc.).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                cuit:
+                  type: string
+                name:
+                  type: string
+                phone:
+                  type: string
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  success:
+                    type: boolean
+                type: object
+          description: Perfil actualizado
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Actualizar perfil
+      tags:
+        - Account
+  /account/me/change-password:
+    post:
+      description: Actualiza la contraseña del usuario actual. Revoca la sesión
+        actual, requiriendo iniciar sesión de nuevo.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                confirmPassword:
+                  type: string
+                newPassword:
+                  type: string
+                oldPassword:
+                  type: string
+              required:
+                - oldPassword
+                - newPassword
+                - confirmPassword
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                type: object
+          description: Contraseña actualizada correctamente
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Cambiar contraseña
+      tags:
+        - Account
+  /account/me/sessions:
+    delete:
+      description: Cierra todas las sesiones activas del usuario, excepto la que está
+        realizando la petición.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                type: object
+          description: Sesiones cerradas
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Cerrar otras sesiones
+      tags:
+        - Account
+    get:
+      description: Devuelve todas las sesiones activas del usuario, indicando cuál es
+        la sesión actual.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  properties:
+                    createdAt:
+                      format: date-time
+                      type: string
+                    id:
+                      type: string
+                    ipAddress:
+                      type: string
+                    isCurrent:
+                      type: boolean
+                    userAgent:
+                      type: string
+                  type: object
+                type: array
+          description: Lista de sesiones
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Listar sesiones activas
+      tags:
+        - Account
+  /account/me/sessions/{id}:
+    delete:
+      description: Cierra una sesión específica por su ID. Si es la sesión actual,
+        también limpia la cookie.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                type: object
+          description: Sesión terminada
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Cerrar sesión específica
+      tags:
+        - Account
   /auth/forgot-password:
     post:
       description: Envía un email con un token temporal para restablecer la contraseña
@@ -578,6 +785,149 @@ paths:
       summary: Restablecer contraseña con token
       tags:
         - Auth
+  /carts:
+    delete:
+      description: Elimina todos los items del carrito actual del usuario.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  success:
+                    type: boolean
+                type: object
+          description: Carrito vaciado exitosamente
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Vaciar carrito
+      tags:
+        - Carts
+    get:
+      description: Devuelve el carrito del usuario logueado, con todos sus items y los
+        precios calculados (subtotales) en base al nivel (tier) del usuario
+        actual.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  id:
+                    type: string
+                  items:
+                    items:
+                      properties:
+                        pricing:
+                          properties:
+                            appliedTier:
+                              type: string
+                            finalSubtotal:
+                              type: number
+                            unitPrice:
+                              type: number
+                          type: object
+                        productId:
+                          type: string
+                        quantity:
+                          type: number
+                        variantId:
+                          type: string
+                      type: object
+                    type: array
+                  status:
+                    type: string
+                  subtotal:
+                    type: number
+                  userId:
+                    type: string
+                type: object
+          description: Carrito hidratado con precios y productos
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Obtener el carrito actual
+      tags:
+        - Carts
+  /carts/items:
+    post:
+      description: Añade un nuevo producto/variante al carrito. Si la variante ya
+        existe, suma la cantidad proporcionada a la cantidad actual.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                productId:
+                  type: string
+                quantity:
+                  minimum: 1
+                  type: integer
+                variantId:
+                  type: string
+              required:
+                - productId
+                - variantId
+                - quantity
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Item agregado al carrito (retorna el carrito hidratado actualizado)
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Agregar item al carrito
+      tags:
+        - Carts
+  /carts/items/{variantId}:
+    patch:
+      description: Reemplaza la cantidad actual de la variante en el carrito con la
+        nueva cantidad exacta enviada. Si se envía 0, se elimina el item.
+      parameters:
+        - in: path
+          name: variantId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                quantity:
+                  minimum: 0
+                  type: integer
+              required:
+                - quantity
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Cantidad actualizada exitosamente
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Actualizar cantidad de un item
+      tags:
+        - Carts
   /categories:
     get:
       description: Retorna una lista de categorías con información reducida para el
@@ -1506,6 +1856,219 @@ paths:
       summary: Obtener producto por Slug
       tags:
         - Products
+  /users:
+    get:
+      description: Obtiene una lista paginada de todos los usuarios del sistema.
+        Permite filtrar por estado o rol.
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: role
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    items:
+                      properties:
+                        email:
+                          type: string
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        role:
+                          type: string
+                        status:
+                          type: string
+                      type: object
+                    type: array
+                  limit:
+                    type: integer
+                  page:
+                    type: integer
+                  total:
+                    type: integer
+                type: object
+          description: Lista de usuarios
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Acceso denegado (requiere rol de administrador)
+      security:
+        - cookieAuth: []
+      summary: Listar todos los usuarios
+      tags:
+        - Users (Admin)
+  /users/{id}:
+    delete:
+      description: Elimina (soft delete o permanente, según implementación) a un
+        usuario del sistema. Un admin no puede eliminarse a sí mismo.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                type: object
+          description: Usuario eliminado correctamente
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Eliminar usuario
+      tags:
+        - Users (Admin)
+    get:
+      description: Devuelve la información completa de un usuario específico.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Detalles del usuario
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '404':
+          $ref: '#/components/responses/Error'
+      security:
+        - cookieAuth: []
+      summary: Obtener usuario por ID
+      tags:
+        - Users (Admin)
+  /users/{id}/role:
+    patch:
+      description: Permite a un administrador cambiar el rol de un usuario (ej.
+        promover un cliente 'user' a 'reseller').
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                adminLevel:
+                  description: Opcional. Nivel de acceso si el rol asignado es admin.
+                  type: string
+                role:
+                  enum:
+                    - user
+                    - reseller
+                    - admin
+                  type: string
+              required:
+                - role
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                type: object
+          description: Rol actualizado
+        '400':
+          $ref: '#/components/responses/Error'
+      security:
+        - cookieAuth: []
+      summary: Actualizar rol de usuario
+      tags:
+        - Users (Admin)
+  /users/{id}/status:
+    patch:
+      description: Permite a un administrador cambiar el estado de un usuario (ej.
+        activarlo, suspenderlo, rechazarlo).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                reason:
+                  description: Motivo de la suspensión o rechazo
+                  type: string
+                status:
+                  enum:
+                    - pending_approval
+                    - active
+                    - rejected
+                    - suspended
+                  type: string
+              required:
+                - status
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                type: object
+          description: Estado actualizado
+        '400':
+          $ref: '#/components/responses/Error'
+      security:
+        - cookieAuth: []
+      summary: Actualizar estado de usuario
+      tags:
+        - Users (Admin)
 servers:
   - description: Desarrollo
     url: http://localhost:8080
@@ -1522,6 +2085,12 @@ tags:
     name: Orders
   - description: Autenticación y gestión de sesiones.
     name: Auth
+  - description: Perfil y configuración del usuario actual.
+    name: Account
+  - description: Gestión del carrito de compras.
+    name: Carts
+  - description: Gestión administrativa de usuarios.
+    name: Users (Admin)
   - description: Gestión administrativa de catálogo (CRUD completo).
     name: Admin - Products
   - description: Gestión de categorías del catálogo.

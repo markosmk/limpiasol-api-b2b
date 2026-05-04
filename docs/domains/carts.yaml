@@ -1,0 +1,143 @@
+paths:
+  /carts:
+    get:
+      summary: Obtener el carrito actual
+      description: Devuelve el carrito del usuario logueado, con todos sus items y los precios calculados (subtotales) en base al nivel (tier) del usuario actual.
+      tags:
+        - Carts
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Carrito hidratado con precios y productos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  userId:
+                    type: string
+                  status:
+                    type: string
+                  subtotal:
+                    type: number
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId:
+                          type: string
+                        variantId:
+                          type: string
+                        quantity:
+                          type: number
+                        pricing:
+                          type: object
+                          properties:
+                            unitPrice:
+                              type: number
+                            finalSubtotal:
+                              type: number
+                            appliedTier:
+                              type: string
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+
+    delete:
+      summary: Vaciar carrito
+      description: Elimina todos los items del carrito actual del usuario.
+      tags:
+        - Carts
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Carrito vaciado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+
+  /carts/items:
+    post:
+      summary: Agregar item al carrito
+      description: Añade un nuevo producto/variante al carrito. Si la variante ya existe, suma la cantidad proporcionada a la cantidad actual.
+      tags:
+        - Carts
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - productId
+                - variantId
+                - quantity
+              properties:
+                productId:
+                  type: string
+                variantId:
+                  type: string
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Item agregado al carrito (retorna el carrito hidratado actualizado)
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '../openapi.base.yaml#/components/responses/Error'
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+
+  /carts/items/{variantId}:
+    patch:
+      summary: Actualizar cantidad de un item
+      description: Reemplaza la cantidad actual de la variante en el carrito con la nueva cantidad exacta enviada. Si se envía 0, se elimina el item.
+      tags:
+        - Carts
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quantity
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 0
+      responses:
+        '200':
+          description: Cantidad actualizada exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '../openapi.base.yaml#/components/responses/Error'
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'

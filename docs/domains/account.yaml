@@ -1,0 +1,191 @@
+paths:
+  /account/me:
+    get:
+      summary: Obtener perfil del usuario actual
+      description: Devuelve la información completa del perfil del usuario autenticado.
+      tags:
+        - Account
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Perfil del usuario
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  email:
+                    type: string
+                  name:
+                    type: string
+                  phone:
+                    type: string
+                  role:
+                    type: string
+                  status:
+                    type: string
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+
+    patch:
+      summary: Actualizar perfil
+      description: Actualiza los datos del usuario actual (nombre, teléfono, etc.).
+      tags:
+        - Account
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                phone:
+                  type: string
+                cuit:
+                  type: string
+      responses:
+        '200':
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          $ref: '../openapi.base.yaml#/components/responses/Error'
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+
+  /account/me/change-password:
+    post:
+      summary: Cambiar contraseña
+      description: Actualiza la contraseña del usuario actual. Revoca la sesión actual, requiriendo iniciar sesión de nuevo.
+      tags:
+        - Account
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - oldPassword
+                - newPassword
+                - confirmPassword
+              properties:
+                oldPassword:
+                  type: string
+                newPassword:
+                  type: string
+                confirmPassword:
+                  type: string
+      responses:
+        '200':
+          description: Contraseña actualizada correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '400':
+          $ref: '../openapi.base.yaml#/components/responses/Error'
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+
+  /account/me/sessions:
+    get:
+      summary: Listar sesiones activas
+      description: Devuelve todas las sesiones activas del usuario, indicando cuál es la sesión actual.
+      tags:
+        - Account
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Lista de sesiones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    ipAddress:
+                      type: string
+                    userAgent:
+                      type: string
+                    createdAt:
+                      type: string
+                      format: date-time
+                    isCurrent:
+                      type: boolean
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+
+    delete:
+      summary: Cerrar otras sesiones
+      description: Cierra todas las sesiones activas del usuario, excepto la que está realizando la petición.
+      tags:
+        - Account
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Sesiones cerradas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
+
+  /account/me/sessions/{id}:
+    delete:
+      summary: Cerrar sesión específica
+      description: Cierra una sesión específica por su ID. Si es la sesión actual, también limpia la cookie.
+      tags:
+        - Account
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sesión terminada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '401':
+          $ref: '../openapi.base.yaml#/components/responses/401Unauthorized'
