@@ -4,7 +4,7 @@ paths:
       summary: Listar todos los usuarios
       description: Obtiene una lista paginada de todos los usuarios del sistema. Permite filtrar por estado o rol.
       tags:
-        - Users (Admin)
+        - Admin - Users
       security:
         - cookieAuth: []
       parameters:
@@ -67,7 +67,7 @@ paths:
       summary: Obtener usuario por ID
       description: Devuelve la información completa de un usuario específico.
       tags:
-        - Users (Admin)
+        - Admin - Users
       security:
         - cookieAuth: []
       parameters:
@@ -92,7 +92,7 @@ paths:
       summary: Eliminar usuario
       description: Elimina (soft delete o permanente, según implementación) a un usuario del sistema. Un admin no puede eliminarse a sí mismo.
       tags:
-        - Users (Admin)
+        - Admin - Users
       security:
         - cookieAuth: []
       parameters:
@@ -123,7 +123,7 @@ paths:
       summary: Actualizar estado de usuario
       description: Permite a un administrador cambiar el estado de un usuario (ej. activarlo, suspenderlo, rechazarlo).
       tags:
-        - Users (Admin)
+        - Admin - Users
       security:
         - cookieAuth: []
       parameters:
@@ -167,7 +167,7 @@ paths:
       summary: Actualizar rol de usuario
       description: Permite a un administrador cambiar el rol de un usuario (ej. promover un cliente 'user' a 'reseller').
       tags:
-        - Users (Admin)
+        - Admin - Users
       security:
         - cookieAuth: []
       parameters:

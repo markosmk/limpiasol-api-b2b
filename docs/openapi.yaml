@@ -421,6 +421,30 @@ components:
         stock:
           type: integer
       type: object
+    Setting:
+      properties:
+        category:
+          type: string
+        key:
+          type: string
+        updatedAt:
+          format: date-time
+          type: string
+        value:
+          type: object
+      type: object
+    UpdateSettingInput:
+      properties:
+        category:
+          type: string
+        key:
+          type: string
+        value:
+          type: object
+      required:
+        - key
+        - value
+      type: object
     User:
       properties:
         email:
@@ -644,6 +668,457 @@ paths:
       summary: Cerrar sesión específica
       tags:
         - Account
+  /admin/modules:
+    get:
+      description: Retorna el estado (habilitado/deshabilitado) de todos los módulos
+        integrables (Email, WhatsApp, etc.).
+      operationId: adminGetModules
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  modules:
+                    items:
+                      properties:
+                        enabled:
+                          type: boolean
+                        name:
+                          type: string
+                      type: object
+                    type: array
+                  success:
+                    type: boolean
+                type: object
+          description: Lista de módulos.
+      security:
+        - cookieAuth: []
+      summary: Listar módulos del sistema
+      tags:
+        - Admin - Settings
+  /admin/modules/{name}:
+    get:
+      description: Retorna la configuración detallada de un módulo específico.
+      operationId: adminGetModuleConfig
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  config:
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Configuración del módulo.
+        '404':
+          description: Módulo no encontrado
+      security:
+        - cookieAuth: []
+      summary: Obtener configuración de un módulo
+      tags:
+        - Admin - Settings
+    patch:
+      description: Habilita/deshabilita un módulo o actualiza su configuración interna
+        (ej. API keys).
+      operationId: adminUpdateModuleConfig
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                config:
+                  description: Valores específicos para el esquema del módulo
+                  type: object
+                enabled:
+                  type: boolean
+              required:
+                - enabled
+              type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Configuración actualizada.
+      security:
+        - cookieAuth: []
+      summary: Actualizar configuración de módulo
+      tags:
+        - Admin - Settings
+  /admin/orders:
+    get:
+      description: Retorna todos los pedidos de la tienda con filtros avanzados.
+      operationId: adminGetOrders
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: status
+          schema:
+            type: string
+        - description: Buscar por código o número de orden.
+          in: query
+          name: search
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    properties:
+                      orders:
+                        items:
+                          $ref: '#/components/schemas/Order'
+                        type: array
+                      total:
+                        type: integer
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Lista de pedidos.
+      security:
+        - cookieAuth: []
+      summary: Listar todas las órdenes (Vista Admin)
+      tags:
+        - Admin - Orders
+  /admin/orders/{id}:
+    get:
+      description: Retorna toda la información de una orden para gestión interna.
+      operationId: adminGetOrderDetail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
+                  success:
+                    type: boolean
+                type: object
+          description: OK.
+      security:
+        - cookieAuth: []
+      summary: Detalle completo de orden (Vista Admin)
+      tags:
+        - Admin - Orders
+  /admin/orders/{id}/delivery:
+    patch:
+      description: Permite cambiar entre envío a domicilio o retiro por local,
+        actualizando los datos relacionados.
+      operationId: adminChangeOrderDelivery
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                deliveryType:
+                  $ref: '#/components/schemas/DeliveryType'
+                pickupLocationData:
+                  type: object
+                shippingData:
+                  type: object
+              required:
+                - deliveryType
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Método de entrega actualizado.
+      security:
+        - cookieAuth: []
+      summary: Cambiar método de entrega
+      tags:
+        - Admin - Orders
+  /admin/orders/{id}/items/add:
+    patch:
+      operationId: adminAddOrderItem
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                productId:
+                  type: string
+                quantity:
+                  type: integer
+                variantId:
+                  type: string
+              required:
+                - productId
+                - variantId
+                - quantity
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Item agregado.
+      security:
+        - cookieAuth: []
+      summary: Agregar producto a la orden
+      tags:
+        - Admin - Orders
+  /admin/orders/{id}/items/{itemId}:
+    delete:
+      operationId: adminRemoveOrderItem
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: itemId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Item removido.
+      security:
+        - cookieAuth: []
+      summary: Remover item de la orden
+      tags:
+        - Admin - Orders
+    patch:
+      operationId: adminUpdateOrderItem
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: itemId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                quantity:
+                  minimum: 1
+                  type: integer
+              required:
+                - quantity
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Cantidad actualizada.
+      security:
+        - cookieAuth: []
+      summary: Modificar cantidad de item
+      tags:
+        - Admin - Orders
+  /admin/orders/{id}/notes:
+    post:
+      description: Añade un comentario o nota para uso exclusivo del staff.
+      operationId: adminAddOrderNote
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                content:
+                  type: string
+                type:
+                  enum:
+                    - general
+                    - urgent
+                    - customer
+                    - logistics
+                  type: string
+              required:
+                - content
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Nota agregada.
+      security:
+        - cookieAuth: []
+      summary: Agregar nota interna
+      tags:
+        - Admin - Orders
+  /admin/orders/{id}/pricing:
+    patch:
+      description: Aplica recargos o descuentos manuales al total de la orden.
+      operationId: adminApplyManualAdjustment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                adjustment:
+                  description: Valor numérico como string (ej. '-500' o '100')
+                  type: string
+                notifyCustomer:
+                  type: boolean
+                reason:
+                  type: string
+              required:
+                - adjustment
+                - reason
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Ajuste aplicado.
+      security:
+        - cookieAuth: []
+      summary: Ajuste manual de precios
+      tags:
+        - Admin - Orders
+  /admin/orders/{id}/status:
+    patch:
+      description: Actualiza el estado de una orden (ej. de pending a paid o shipped).
+      operationId: adminUpdateOrderStatus
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                reason:
+                  type: string
+                status:
+                  $ref: '#/components/schemas/OrderStatus'
+              required:
+                - status
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Estado actualizado.
+      security:
+        - cookieAuth: []
+      summary: Cambiar estado de orden
+      tags:
+        - Admin - Orders
+  /admin/settings:
+    get:
+      description: Retorna un listado de todas las configuraciones de la tienda.
+        Opcionalmente filtrado por categoría.
+      operationId: adminGetSettings
+      parameters:
+        - description: Filtrar configuraciones por categoría (ej. 'store',
+            'notifications', 'checkout').
+          in: query
+          name: category
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Setting'
+                type: array
+          description: Lista de configuraciones.
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+      security:
+        - cookieAuth: []
+      summary: Obtener configuraciones globales
+      tags:
+        - Admin - Settings
+    patch:
+      description: Actualiza el valor de una clave de configuración específica.
+      operationId: adminUpdateSetting
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSettingInput'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                type: object
+          description: Configuración actualizada.
+      security:
+        - cookieAuth: []
+      summary: Actualizar una configuración
+      tags:
+        - Admin - Settings
   /auth/forgot-password:
     post:
       description: Envía un email con un token temporal para restablecer la contraseña
@@ -783,6 +1258,34 @@ paths:
         '400':
           description: Token inválido o expirado.
       summary: Restablecer contraseña con token
+      tags:
+        - Auth
+  /auth/verify-email:
+    get:
+      description: Verifica la cuenta de un usuario utilizando el token recibido por email.
+      operationId: verifyEmail
+      parameters:
+        - description: El token de verificación único recibido en el correo.
+          in: query
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                type: object
+          description: Correo electrónico verificado exitosamente.
+        '400':
+          description: Token inválido o expirado.
+      summary: Verificar correo electrónico
       tags:
         - Auth
   /carts:
@@ -1376,6 +1879,10 @@ paths:
             maximum: 100
             minimum: 1
             type: integer
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/OrderStatus'
       responses:
         '200':
           content:
@@ -1411,30 +1918,18 @@ paths:
           application/json:
             schema:
               properties:
+                billingData:
+                  $ref: '#/components/schemas/Address'
                 deliveryType:
                   $ref: '#/components/schemas/DeliveryType'
-                items:
-                  items:
-                    properties:
-                      productId:
-                        type: string
-                      quantity:
-                        minimum: 1
-                        type: integer
-                      variantId:
-                        nullable: true
-                        type: string
-                    required:
-                      - productId
-                      - quantity
-                    type: object
-                  minItems: 1
-                  type: array
-                shippingAddress:
+                observations:
+                  type: string
+                pickupLocationData:
+                  type: object
+                shippingData:
                   $ref: '#/components/schemas/Address'
               required:
                 - deliveryType
-                - items
               type: object
         required: true
       responses:
@@ -1457,11 +1952,7 @@ paths:
                 type: object
           description: Pedido creado con éxito.
         '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Error de validación o falta de stock.
+          $ref: '#/components/responses/Error'
         '401':
           $ref: '#/components/responses/401Unauthorized'
       security:
@@ -1469,14 +1960,13 @@ paths:
       summary: Crear nuevo pedido
       tags:
         - Orders
-  /orders/{orderId}:
+  /orders/{id}:
     get:
-      description: Retorna la información completa de un pedido específico, incluyendo
-        el detalle de ítems y estado actual.
-      operationId: getOrderDetail
+      description: Retorna la información completa de un pedido específico del usuario.
+      operationId: getMyOrderDetail
       parameters:
         - in: path
-          name: orderId
+          name: id
           required: true
           schema:
             type: string
@@ -1491,16 +1981,55 @@ paths:
                   success:
                     type: boolean
                 type: object
-          description: Detalle del pedido obtenido correctamente.
+          description: Detalle del pedido.
         '404':
+          $ref: '#/components/responses/404NotFound'
+      security:
+        - cookieAuth: []
+      summary: Obtener detalle de mi pedido
+      tags:
+        - Orders
+  /orders/{id}/cancel:
+    post:
+      description: Permite al cliente cancelar un pedido que aún no ha sido procesado.
+        Requiere un motivo.
+      operationId: cancelMyOrder
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                reason:
+                  minLength: 10
+                  type: string
+              required:
+                - reason
+              type: object
+        required: true
+      responses:
+        '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
-          description: Pedido no encontrado.
+                properties:
+                  data:
+                    properties:
+                      orderId:
+                        type: string
+                    type: object
+                  success:
+                    type: boolean
+                type: object
+          description: Pedido cancelado.
       security:
         - cookieAuth: []
-      summary: Obtener detalle de pedido
+      summary: Cancelar mi pedido
       tags:
         - Orders
   /products:
@@ -1918,7 +2447,7 @@ paths:
         - cookieAuth: []
       summary: Listar todos los usuarios
       tags:
-        - Users (Admin)
+        - Admin - Users
   /users/{id}:
     delete:
       description: Elimina (soft delete o permanente, según implementación) a un
@@ -1949,7 +2478,7 @@ paths:
         - cookieAuth: []
       summary: Eliminar usuario
       tags:
-        - Users (Admin)
+        - Admin - Users
     get:
       description: Devuelve la información completa de un usuario específico.
       parameters:
@@ -1973,7 +2502,7 @@ paths:
         - cookieAuth: []
       summary: Obtener usuario por ID
       tags:
-        - Users (Admin)
+        - Admin - Users
   /users/{id}/role:
     patch:
       description: Permite a un administrador cambiar el rol de un usuario (ej.
@@ -2020,7 +2549,7 @@ paths:
         - cookieAuth: []
       summary: Actualizar rol de usuario
       tags:
-        - Users (Admin)
+        - Admin - Users
   /users/{id}/status:
     patch:
       description: Permite a un administrador cambiar el estado de un usuario (ej.
@@ -2068,7 +2597,7 @@ paths:
         - cookieAuth: []
       summary: Actualizar estado de usuario
       tags:
-        - Users (Admin)
+        - Admin - Users
 servers:
   - description: Desarrollo
     url: http://localhost:8080
@@ -2090,10 +2619,14 @@ tags:
   - description: Gestión del carrito de compras.
     name: Carts
   - description: Gestión administrativa de usuarios.
-    name: Users (Admin)
+    name: Admin - Users
   - description: Gestión administrativa de catálogo (CRUD completo).
     name: Admin - Products
   - description: Gestión de categorías del catálogo.
     name: Admin - Categories
   - description: Gestión de colecciones y agrupaciones.
     name: Admin - Collections
+  - description: Gestión y ajustes de pedidos (Backoffice).
+    name: Admin - Orders
+  - description: Configuración global y gestión de módulos de la plataforma.
+    name: Admin - Settings

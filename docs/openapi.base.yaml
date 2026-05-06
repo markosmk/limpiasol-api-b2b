@@ -29,7 +29,7 @@ tags:
     description: Perfil y configuración del usuario actual.
   - name: Carts
     description: Gestión del carrito de compras.
-  - name: Users (Admin)
+  - name: Admin - Users
     description: Gestión administrativa de usuarios.
   - name: Admin - Products
     description: Gestión administrativa de catálogo (CRUD completo).
@@ -37,6 +37,10 @@ tags:
     description: Gestión de categorías del catálogo.
   - name: Admin - Collections
     description: Gestión de colecciones y agrupaciones.
+  - name: Admin - Orders
+    description: Gestión y ajustes de pedidos (Backoffice).
+  - name: Admin - Settings
+    description: Configuración global y gestión de módulos de la plataforma.
 
 components:
   securitySchemes:

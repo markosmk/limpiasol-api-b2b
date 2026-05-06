@@ -57,6 +57,32 @@ paths:
         "400":
           $ref: "../openapi.base.yaml#/components/responses/401Unauthorized"
 
+  /auth/verify-email:
+    get:
+      summary: Verificar correo electrónico
+      description: Verifica la cuenta de un usuario utilizando el token recibido por email.
+      operationId: verifyEmail
+      tags: [Auth]
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: El token de verificación único recibido en el correo.
+      responses:
+        "200":
+          description: Correo electrónico verificado exitosamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+        "400":
+          description: Token inválido o expirado.
+
   /auth/logout:
     post:
       summary: Cerrar sesión

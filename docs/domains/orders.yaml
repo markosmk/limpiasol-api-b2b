@@ -1,5 +1,8 @@
 # Paths específicos de Orders
 paths:
+  # ─────────────────────────────────────
+  # CLIENT ORDERS
+  # ─────────────────────────────────────
   /orders:
     post:
       summary: Crear nuevo pedido
@@ -13,20 +16,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [deliveryType, items]
+              required: [deliveryType]
               properties:
                 deliveryType: { $ref: "#/components/schemas/DeliveryType" }
-                items:
-                  type: array
-                  minItems: 1
-                  items:
-                    type: object
-                    required: [productId, quantity]
-                    properties:
-                      productId: { type: string }
-                      variantId: { type: string, nullable: true }
-                      quantity: { type: integer, minimum: 1 }
-                shippingAddress: { $ref: "../openapi.base.yaml#/components/schemas/Address" }
+                shippingData: { $ref: "../openapi.base.yaml#/components/schemas/Address" }
+                billingData: { $ref: "../openapi.base.yaml#/components/schemas/Address" }
+                pickupLocationData: { type: object }
+                observations: { type: string }
       responses:
         "201":
           description: Pedido creado con éxito.
@@ -42,13 +38,8 @@ paths:
                       orderId: { type: string }
                       orderCode: { type: string }
                       total: { type: string }
-        "400":
-          description: Error de validación o falta de stock.
-          content:
-            application/json:
-              schema: { $ref: "../openapi.base.yaml#/components/schemas/Error" }
-        "401":
-          $ref: "../openapi.base.yaml#/components/responses/401Unauthorized"
+        "400": { $ref: "../openapi.base.yaml#/components/responses/Error" }
+        "401": { $ref: "../openapi.base.yaml#/components/responses/401Unauthorized" }
 
     get:
       summary: Listar mis pedidos
@@ -63,6 +54,9 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/OrderStatus" }
       responses:
         "200":
           description: Lista de pedidos con paginación.
@@ -79,21 +73,21 @@ paths:
                       total: { type: integer }
                       hasMore: { type: boolean }
 
-  /orders/{orderId}:
+  /orders/{id}:
     get:
-      summary: Obtener detalle de pedido
-      description: Retorna la información completa de un pedido específico, incluyendo el detalle de ítems y estado actual.
-      operationId: getOrderDetail
+      summary: Obtener detalle de mi pedido
+      description: Retorna la información completa de un pedido específico del usuario.
+      operationId: getMyOrderDetail
       tags: [Orders]
       security: [{ cookieAuth: [] }]
       parameters:
-        - name: orderId
+        - name: id
           in: path
           required: true
           schema: { type: string }
       responses:
         "200":
-          description: Detalle del pedido obtenido correctamente.
+          description: Detalle del pedido.
           content:
             application/json:
               schema:
@@ -101,11 +95,283 @@ paths:
                 properties:
                   success: { type: boolean }
                   data: { $ref: "#/components/schemas/Order" }
-        "404":
-          description: Pedido no encontrado.
+        "404": { $ref: "../openapi.base.yaml#/components/responses/404NotFound" }
+
+  /orders/{id}/cancel:
+    post:
+      summary: Cancelar mi pedido
+      description: Permite al cliente cancelar un pedido que aún no ha sido procesado. Requiere un motivo.
+      operationId: cancelMyOrder
+      tags: [Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 10 }
+      responses:
+        "200":
+          description: Pedido cancelado.
           content:
             application/json:
-              schema: { $ref: "../openapi.base.yaml#/components/schemas/Error" }
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: object, properties: { orderId: { type: string } } }
+
+  # ─────────────────────────────────────
+  # ADMIN ORDERS (Management)
+  # ─────────────────────────────────────
+  /admin/orders:
+    get:
+      summary: Listar todas las órdenes (Vista Admin)
+      description: Retorna todos los pedidos de la tienda con filtros avanzados.
+      operationId: adminGetOrders
+      tags: [Admin - Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          description: Buscar por código o número de orden.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lista de pedidos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      orders: { type: array, items: { $ref: "#/components/schemas/Order" } }
+                      total: { type: integer }
+
+  /admin/orders/{id}:
+    get:
+      summary: Detalle completo de orden (Vista Admin)
+      description: Retorna toda la información de una orden para gestión interna.
+      operationId: adminGetOrderDetail
+      tags: [Admin - Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/Order" }
+
+  /admin/orders/{id}/status:
+    patch:
+      summary: Cambiar estado de orden
+      description: Actualiza el estado de una orden (ej. de pending a paid o shipped).
+      operationId: adminUpdateOrderStatus
+      tags: [Admin - Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: "#/components/schemas/OrderStatus" }
+                reason: { type: string }
+      responses:
+        "200":
+          description: Estado actualizado.
+
+  /admin/orders/{id}/notes:
+    post:
+      summary: Agregar nota interna
+      description: Añade un comentario o nota para uso exclusivo del staff.
+      operationId: adminAddOrderNote
+      tags: [Admin - Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                type: { type: string, enum: [general, urgent, customer, logistics] }
+      responses:
+        "200":
+          description: Nota agregada.
+
+  # ─────────────────────────────────────
+  # ADMIN ORDERS (Adjusting)
+  # ─────────────────────────────────────
+  /admin/orders/{id}/delivery:
+    patch:
+      summary: Cambiar método de entrega
+      description: Permite cambiar entre envío a domicilio o retiro por local, actualizando los datos relacionados.
+      operationId: adminChangeOrderDelivery
+      tags: [Admin - Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliveryType]
+              properties:
+                deliveryType: { $ref: "#/components/schemas/DeliveryType" }
+                shippingData: { type: object }
+                pickupLocationData: { type: object }
+      responses:
+        "200":
+          description: Método de entrega actualizado.
+
+  /admin/orders/{id}/pricing:
+    patch:
+      summary: Ajuste manual de precios
+      description: Aplica recargos o descuentos manuales al total de la orden.
+      operationId: adminApplyManualAdjustment
+      tags: [Admin - Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adjustment, reason]
+              properties:
+                adjustment: { type: string, description: "Valor numérico como string (ej. '-500' o '100')" }
+                reason: { type: string }
+                notifyCustomer: { type: boolean }
+      responses:
+        "200":
+          description: Ajuste aplicado.
+
+  /admin/orders/{id}/items/add:
+    patch:
+      summary: Agregar producto a la orden
+      operationId: adminAddOrderItem
+      tags: [Admin - Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, variantId, quantity]
+              properties:
+                productId: { type: string }
+                variantId: { type: string }
+                quantity: { type: integer }
+      responses:
+        "200":
+          description: Item agregado.
+
+  /admin/orders/{id}/items/{itemId}:
+    patch:
+      summary: Modificar cantidad de item
+      operationId: adminUpdateOrderItem
+      tags: [Admin - Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Cantidad actualizada.
+
+    delete:
+      summary: Remover item de la orden
+      operationId: adminRemoveOrderItem
+      tags: [Admin - Orders]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Item removido.
+
 
 # Components específicos de Orders
 components:

@@ -1,4 +1,131 @@
 paths:
+  # ─────────────────────────────────────
+  # ADMIN - SETTINGS & MODULES
+  # ─────────────────────────────────────
+  /admin/settings:
+    get:
+      summary: Obtener configuraciones globales
+      description: Retorna un listado de todas las configuraciones de la tienda. Opcionalmente filtrado por categoría.
+      operationId: adminGetSettings
+      tags: [Admin - Settings]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: category
+          in: query
+          description: Filtrar configuraciones por categoría (ej. 'store', 'notifications', 'checkout').
+          schema: { type: string }
+      responses:
+        "200":
+          description: Lista de configuraciones.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Setting" }
+        "401": { $ref: "../openapi.base.yaml#/components/responses/401Unauthorized" }
+
+    patch:
+      summary: Actualizar una configuración
+      description: Actualiza el valor de una clave de configuración específica.
+      operationId: adminUpdateSetting
+      tags: [Admin - Settings]
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateSettingInput" }
+      responses:
+        "200":
+          description: Configuración actualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+
+  /admin/modules:
+    get:
+      summary: Listar módulos del sistema
+      description: Retorna el estado (habilitado/deshabilitado) de todos los módulos integrables (Email, WhatsApp, etc.).
+      operationId: adminGetModules
+      tags: [Admin - Settings]
+      security: [{ cookieAuth: [] }]
+      responses:
+        "200":
+          description: Lista de módulos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  modules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        enabled: { type: boolean }
+
+  /admin/modules/{name}:
+    get:
+      summary: Obtener configuración de un módulo
+      description: Retorna la configuración detallada de un módulo específico.
+      operationId: adminGetModuleConfig
+      tags: [Admin - Settings]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Configuración del módulo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  config: { type: object }
+        "404": { description: Módulo no encontrado }
+
+    patch:
+      summary: Actualizar configuración de módulo
+      description: Habilita/deshabilita un módulo o actualiza su configuración interna (ej. API keys).
+      operationId: adminUpdateModuleConfig
+      tags: [Admin - Settings]
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+                config: { type: object, description: "Valores específicos para el esquema del módulo" }
+      responses:
+        "200":
+          description: Configuración actualizada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: object }
+
   /products/admin:
     get:
       summary: Listar todos los productos (vista admin)
@@ -390,6 +517,22 @@ paths:
 
 components:
   schemas:
+    Setting:
+      type: object
+      properties:
+        key: { type: string }
+        value: { type: object }
+        category: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    UpdateSettingInput:
+      type: object
+      required: [key, value]
+      properties:
+        key: { type: string }
+        value: { type: object }
+        category: { type: string }
+
     AdminCreateProduct:
       type: object
       required: [name, slug, status]
