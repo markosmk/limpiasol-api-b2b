@@ -55,12 +55,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Push DB Schema
-        run: pnpm run test:push-db
+        run: pnpm run db:push:ci
         env:
           DATABASE_URL: postgres://testuser:testpass@localhost:5432/myapp_test
 
       - name: Run tests
-        run: pnpm run test
+        run: pnpm run test:ci
         env:
           DATABASE_URL: postgres://testuser:testpass@localhost:5432/myapp_test
           REDIS_URL: redis://localhost:6379
