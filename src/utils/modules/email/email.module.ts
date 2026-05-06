@@ -11,20 +11,39 @@ export class EmailModule extends BaseModule<EmailModuleConfig> {
     super("email")
   }
   /**
-   * Obtiene la API key desencriptada
-   * Retorna null si no está configurada
+   * Obtiene las credenciales desencriptadas y listas para usar en los adaptadores
    */
-  private getApiKey(): string | null {
-    if (!this.config?.credentials?.apiKeyEncrypted) {
-      return null
+  private getDecryptedCredentials() {
+    if (!this.config?.credentials) return {}
+
+    const creds = this.config.credentials
+    const decrypted: {
+      apiKey?: string
+      apiSecret?: string
+      awsRegion?: string
+      smtpHost?: string
+      smtpPort?: number
+      smtpSecure?: boolean
+      smtpUser?: string
+      smtpPass?: string
+    } = {
+      awsRegion: creds.awsRegion,
+      smtpHost: creds.smtpHost,
+      smtpPort: creds.smtpPort,
+      smtpSecure: creds.smtpSecure
     }
 
     try {
-      return decryptFromBase64(this.config.credentials.apiKeyEncrypted)
+      if (creds.apiKeyEncrypted) decrypted.apiKey = decryptFromBase64(creds.apiKeyEncrypted)
+      if (creds.apiSecretEncrypted)
+        decrypted.apiSecret = decryptFromBase64(creds.apiSecretEncrypted)
+      if (creds.smtpUserEncrypted) decrypted.smtpUser = decryptFromBase64(creds.smtpUserEncrypted)
+      if (creds.smtpPassEncrypted) decrypted.smtpPass = decryptFromBase64(creds.smtpPassEncrypted)
     } catch (error) {
-      console.error("[EmailModule] Failed to decrypt API key:", error)
-      return null
+      console.error("[EmailModule] Failed to decrypt credentials:", error)
     }
+
+    return decrypted
   }
 
   /**
@@ -43,7 +62,8 @@ export class EmailModule extends BaseModule<EmailModuleConfig> {
       return { success: false, error: "Módulo de email no habilitado" }
     }
 
-    const apiKey = params.apiKey ?? this.getApiKey() ?? undefined
+    const decryptedCredentials = this.getDecryptedCredentials()
+    const apiKey = params.apiKey ?? decryptedCredentials.apiKey
     const providerType = params.providerType ?? this.config?.provider ?? "console"
     const sender = this.config?.credentials
       ? {
@@ -55,6 +75,7 @@ export class EmailModule extends BaseModule<EmailModuleConfig> {
     try {
       // Tu EmailService ya decide qué adapter usar (Brevo vs Console)
       await this.emailService.sendEmail({
+        ...decryptedCredentials,
         ...params,
         apiKey,
         providerType,
@@ -94,7 +115,8 @@ export class EmailModule extends BaseModule<EmailModuleConfig> {
     }
 
     const { to, templateKey, templateParams } = params
-    const apiKey = this.getApiKey() ?? undefined
+    const decryptedCredentials = this.getDecryptedCredentials()
+    const apiKey = decryptedCredentials.apiKey
     const provider = this.config?.provider || "console"
 
     // Obtenemos el remitente configurado en la BD
@@ -109,6 +131,7 @@ export class EmailModule extends BaseModule<EmailModuleConfig> {
       // NIVEL 1: ¿Existe un Template ID en Brevo?
       if (provider === "brevo" && this.config?.templateIds?.[templateKey]) {
         await this.emailService.sendEmail({
+          ...decryptedCredentials,
           to,
           sender,
           templateId: this.config.templateIds[templateKey],
@@ -140,6 +163,7 @@ export class EmailModule extends BaseModule<EmailModuleConfig> {
 
       // Enviar usando HTML (Niveles 2 y 3)
       await this.emailService.sendEmail({
+        ...decryptedCredentials,
         to,
         sender,
         subject: subjects[templateKey],

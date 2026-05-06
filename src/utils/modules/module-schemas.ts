@@ -41,15 +41,44 @@ export const moduleDefinitions: ModuleDefinitionInput = {
   email: {
     schema: emailModuleConfigSchema,
     onBeforeSave: (input) => {
-      const { apiKey, apiSecret, ...safeCredentials } = input.credentials
-
       const storageConfig: EmailModuleConfig = {
-        ...input,
-        credentials: safeCredentials
+        provider: input.provider,
+        templates: input.templates,
+        templateIds: input.templateIds,
+        credentials: {
+          fromName: input.credentials?.fromName || "", // || "LimpiaSol"
+          fromEmail: input.credentials?.fromEmail || "" // || "no-reply@limpiasol.com"
+        }
       }
 
-      if (apiKey) storageConfig.credentials.apiKeyEncrypted = encryptToBase64(apiKey)
-      if (apiSecret) storageConfig.credentials.apiSecretEncrypted = encryptToBase64(apiSecret)
+      if (input.credentials) {
+        if ("apiKey" in input.credentials && input.credentials.apiKey) {
+          storageConfig.credentials.apiKeyEncrypted = encryptToBase64(input.credentials.apiKey)
+        }
+        if ("apiSecret" in input.credentials && input.credentials.apiSecret) {
+          storageConfig.credentials.apiSecretEncrypted = encryptToBase64(
+            input.credentials.apiSecret
+          )
+        }
+        if ("awsRegion" in input.credentials && input.credentials.awsRegion) {
+          storageConfig.credentials.awsRegion = input.credentials.awsRegion
+        }
+        if ("smtpHost" in input.credentials && input.credentials.smtpHost) {
+          storageConfig.credentials.smtpHost = input.credentials.smtpHost
+          storageConfig.credentials.smtpPort = input.credentials.smtpPort
+          storageConfig.credentials.smtpSecure = input.credentials.smtpSecure
+          if ("smtpUser" in input.credentials && input.credentials.smtpUser) {
+            storageConfig.credentials.smtpUserEncrypted = encryptToBase64(
+              input.credentials.smtpUser
+            )
+          }
+          if ("smtpPass" in input.credentials && input.credentials.smtpPass) {
+            storageConfig.credentials.smtpPassEncrypted = encryptToBase64(
+              input.credentials.smtpPass
+            )
+          }
+        }
+      }
 
       return storageConfig
     }

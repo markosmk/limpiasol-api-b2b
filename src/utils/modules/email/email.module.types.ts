@@ -6,7 +6,7 @@ export type EmailModuleConfig = {
   /**
    * Proveedor de email
    */
-  provider: "brevo" | "resend" | "smtp" | null
+  provider: "brevo" | "resend" | "smtp" | "console" | "ses" | null
   credentials: {
     /**
      * API Key encriptada
@@ -18,6 +18,16 @@ export type EmailModuleConfig = {
     apiSecretEncrypted?: string
     fromName: string
     fromEmail: string
+
+    // AWS SES
+    awsRegion?: string
+
+    // SMTP
+    smtpHost?: string
+    smtpPort?: number
+    smtpSecure?: boolean
+    smtpUserEncrypted?: string
+    smtpPassEncrypted?: string
   }
   /**
    * Plantillas de email
@@ -53,6 +63,13 @@ export interface SendEmailOptions {
   params?: Record<string, unknown>
   // aditional
   apiKey?: string
+  apiSecret?: string
+  awsRegion?: string
+  smtpHost?: string
+  smtpPort?: number
+  smtpSecure?: boolean
+  smtpUser?: string
+  smtpPass?: string
 }
 
 export interface EmailProvider {
