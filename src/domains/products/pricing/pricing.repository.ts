@@ -10,47 +10,49 @@ export class ProductsPricingRepository {
   /**
    * Busca el tier de precio para un producto/variante + tipo de usuario
    * Prioriza: variante específica > producto base (variantId = NULL)
+   * @deprecated use findPriceTiersForProduct instead
    */
-  async findPriceTier(productId: string, variantId: string | null, userTier: UserTier) {
-    // Primero intentamos con variante específica
-    if (variantId) {
-      const tier = await this.database.query.priceTiers.findFirst({
-        where: and(
-          eq(priceTiers.productId, productId),
-          eq(priceTiers.variantId, variantId),
-          eq(priceTiers.tierType, userTier)
-        )
-      })
+  // async findPriceTier(productId: string, variantId: string | null, userTier: UserTier) {
+  //   // Primero intentamos con variante específica
+  //   if (variantId) {
+  //     const tier = await this.database.query.priceTiers.findFirst({
+  //       where: and(
+  //         eq(priceTiers.productId, productId),
+  //         eq(priceTiers.variantId, variantId),
+  //         eq(priceTiers.tierType, userTier)
+  //       )
+  //     })
 
-      if (tier) return tier
-    }
+  //     if (tier) return tier
+  //   }
 
-    // Fallback: precio base del producto (variantId = NULL)
-    const fallbackTier = await this.database.query.priceTiers.findFirst({
-      where: and(
-        eq(priceTiers.productId, productId),
-        isNull(priceTiers.variantId),
-        eq(priceTiers.tierType, userTier)
-      )
-    })
+  //   // Fallback: precio base del producto (variantId = NULL)
+  //   const fallbackTier = await this.database.query.priceTiers.findFirst({
+  //     where: and(
+  //       eq(priceTiers.productId, productId),
+  //       isNull(priceTiers.variantId),
+  //       eq(priceTiers.tierType, userTier)
+  //     )
+  //   })
 
-    return fallbackTier || null
-  }
+  //   return fallbackTier || null
+  // }
 
   /**
    * Fallback a precio retail si no encuentra el tier del usuario
+   * @deprecated use memory-fallback instead
    */
-  async findFallbackRetailPrice(productId: string, variantId?: string | null) {
-    const fallback = await this.database.query.priceTiers.findFirst({
-      where: and(
-        eq(priceTiers.productId, productId),
-        eq(priceTiers.tierType, "retail"),
-        variantId ? eq(priceTiers.variantId, variantId) : isNull(priceTiers.variantId)
-      )
-    })
+  // async findFallbackRetailPrice(productId: string, variantId?: string | null) {
+  //   const fallback = await this.database.query.priceTiers.findFirst({
+  //     where: and(
+  //       eq(priceTiers.productId, productId),
+  //       eq(priceTiers.tierType, "retail"),
+  //       variantId ? eq(priceTiers.variantId, variantId) : isNull(priceTiers.variantId)
+  //     )
+  //   })
 
-    return fallback || null
-  }
+  //   return fallback || null
+  // }
 
   /**
    * Obtiene todos los tiers de precio para un producto/variante
