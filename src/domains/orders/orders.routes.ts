@@ -444,9 +444,8 @@ export default async function ordersRoutes(app: FastifyInstance) {
         }
         const admin = request.user!
 
-        await adjustingService.addOrderItem(id, { productId, variantId, quantity }, admin)
-
-        return reply.send({ success: true })
+        const result = await adjustingService.addOrderItem(id, { productId, variantId, quantity }, admin)
+        return reply.send(result)
       } catch (err) {
         // if (err instanceof AppError) {
         //   return reply.code(400).send({ error: err.message, code: err.code })

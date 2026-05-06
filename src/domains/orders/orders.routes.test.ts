@@ -63,6 +63,8 @@ describe("Orders Domain - B2B Flow", () => {
   let app: FastifyInstance
   let testProduct: Product
   let testProduct2: Product
+  let testVariant1Id: string
+  let testVariant2Id: string
   let cleanupSession: (() => Promise<void>) | null = null
   let customerSessionId: string
   let adminSessionId: string
@@ -130,6 +132,22 @@ describe("Orders Domain - B2B Flow", () => {
       { productId: p2Id, tierType: "reseller", price: "2.00" }
     ])
 
+    const [{ id: v1Id }] = await db.insert(productVariants).values({
+      productId: p1Id,
+      name: "Default",
+      sku: "SKU-1",
+      options: {}
+    }).returning()
+    testVariant1Id = v1Id
+
+    const [{ id: v2Id }] = await db.insert(productVariants).values({
+      productId: p2Id,
+      name: "Default",
+      sku: "SKU-2",
+      options: {}
+    }).returning()
+    testVariant2Id = v2Id
+
     const product1 = await db.query.products.findFirst({ where: eq(products.id, p1Id) })
     const product2 = await db.query.products.findFirst({ where: eq(products.id, p2Id) })
 
@@ -162,12 +180,12 @@ describe("Orders Domain - B2B Flow", () => {
       await db.insert(cartItems).values([
         {
           cartId: cart.id,
-          variantId: "var_1",
+          variantId: testVariant1Id,
           quantity: 20
         },
         {
           cartId: cart.id,
-          variantId: "var_2",
+          variantId: testVariant2Id,
           quantity: 50
         }
       ])
@@ -188,8 +206,8 @@ describe("Orders Domain - B2B Flow", () => {
             phone: "1122334455"
           },
           items: [
-            { productId: testProduct.id, quantity: 20 }, // 20 * $5 = $100
-            { productId: testProduct2.id, quantity: 50 } // 50 * $2 = $100
+            { productId: testProduct.id, variantId: testVariant1Id, quantity: 20 },
+            { productId: testProduct2.id, variantId: testVariant2Id, quantity: 50 }
           ]
         }
       })
@@ -208,8 +226,8 @@ describe("Orders Domain - B2B Flow", () => {
           phone: "1122334455"
         },
         items: [
-          { productId: testProduct.id, quantity: 20 }, // 20 * $5 = $100
-          { productId: testProduct2.id, quantity: 50 } // 50 * $2 = $100
+          { productId: testProduct.id, variantId: testVariant1Id, quantity: 20 },
+          { productId: testProduct2.id, variantId: testVariant2Id, quantity: 50 }
         ]
       }
 
@@ -245,12 +263,9 @@ describe("Orders Domain - B2B Flow", () => {
       const tomorrow = new Date(today)
       tomorrow.setDate(today.getDate() + 1)
 
-      // add item product 1 to cart itemns wit 5 in quantity
-      await db.insert(cartItems).values({
-        cartId: cartId,
-        variantId: "var_1",
+      await db.update(cartItems).set({
         quantity: 5 // Error: minQuantity es 10
-      })
+      }).where(eq(cartItems.variantId, testVariant1Id))
 
       const payload = {
         deliveryType: "pickup",
@@ -291,11 +306,13 @@ describe("Orders Domain - B2B Flow", () => {
       const cart = await createCartAndItemsBase(customerId, [
         {
           productId: testProduct.id,
-          quantity: 10 // 10 * 5 = $50
+          variantId: testVariant1Id,
+          quantity: 10
         },
         {
           productId: testProduct2.id,
-          quantity: 10 // 10 * 2 = $20
+          variantId: testVariant2Id,
+          quantity: 10
         }
       ])
       cartId = cart.id
@@ -374,6 +391,37 @@ describe("Orders Domain - B2B Flow", () => {
       expect(body.newTotal).toBe("20.00")
     })
 
+    it("Admin debe poder agregar un nuevo item a la orden", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/admin/orders/${activeOrderId}/items/add`,
+        payload: {
+          productId: testProduct.id,
+          variantId: testVariant1Id,
+          quantity: 10
+        },
+        cookies: { session: adminSessionId }
+      })
+
+      expect(response.statusCode).toBe(200)
+      const body = response.json()
+      expect(body.success).toBe(true)
+
+      expect(body.success).toBe(true)
+      // Inicialmente teníamos 2 items (Total: $70)
+      // Agregamos 10 más de testProduct ($5 cada uno = $50)
+      // El nuevo total debe ser $120.00
+      expect(body.newTotal).toBe("120.00")
+      
+      const dbOrder = await db.query.orders.findFirst({
+        where: eq(orders.id, activeOrderId),
+        with: { items: true }
+      })
+      expect(dbOrder).toBeDefined()
+      // Verificamos que se agregó el tercer item
+      expect(dbOrder!.items.length).toBe(3)
+    })
+
     it("Debe fallar si el cliente (no admin) intenta editar un item", async () => {
       const response = await app.inject({
         method: "PATCH",
@@ -431,11 +479,13 @@ describe("Orders Domain - B2B Flow", () => {
       const cart = await createCartAndItemsBase(customerId, [
         {
           productId: testProduct.id,
-          quantity: 10 // 10 * 5 = $50
+          variantId: testVariant1Id,
+          quantity: 10
         },
         {
           productId: testProduct2.id,
-          quantity: 10 // 10 * 2 = $20
+          variantId: testVariant2Id,
+          quantity: 10
         }
       ])
       cartId = cart.id
@@ -452,7 +502,7 @@ describe("Orders Domain - B2B Flow", () => {
             scheduledDate: "2026-06-01",
             scheduledTime: "10:00"
           },
-          items: [{ productId: testProduct.id, quantity: 10 }]
+          items: [{ productId: testProduct.id, variantId: testVariant1Id, quantity: 10 }]
         },
         cookies: { session: customerSessionId }
       })
@@ -519,7 +569,8 @@ describe("Orders Domain - B2B Flow", () => {
       const cart = await createCartAndItemsBase(customerId, [
         {
           productId: testProduct.id,
-          quantity: 10 // 10 * 5 = $50
+          variantId: testVariant1Id,
+          quantity: 10
         }
       ])
       cartId = cart.id
@@ -609,6 +660,7 @@ describe("Orders Domain - B2B Flow", () => {
       const cart = await createCartAndItemsBase(customerId, [
         {
           productId: testProduct.id,
+          variantId: testVariant1Id,
           quantity: 10
         }
       ])
