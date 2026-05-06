@@ -1,16 +1,7 @@
 # `npx drizzle-kit push:mysql` → crea tablas.
 # `npx drizzle-kit generate:mysql && npx drizzle-kit migrate` → producción.
 services:
-  lsol-mysql:
-    image: mysql:8
-    container_name: mysql-container-lsol
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: ecommerce_limpiasol
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data_lsol:/var/lib/mysql
+
   lsol-redis:
     image: redis:latest
     container_name: redis-container-lsol
@@ -19,6 +10,31 @@ services:
     volumes:
       - redis_data_lsol:/data
 
+  lsol-postgres:
+    image: postgres:18
+    container_name: postgres-container-lsol
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: ecommerce_limpiasol_pg
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_lsol:/var/lib/postgresql
+
+  lsol-postgres-test:
+    image: postgres:18
+    container_name: postgres-container-lsol-test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: ecommerce_limpiasol_test
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data_lsol_test:/var/lib/postgresql
+
 volumes:
-  mysql_data_lsol:
   redis_data_lsol:
+  postgres_data_lsol:
+  postgres_data_lsol_test:
