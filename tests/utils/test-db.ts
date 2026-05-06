@@ -15,8 +15,8 @@ let connection: NodePgDatabase<typeof schema>
 let db: Database
 
 async function setupTestDB() {
-  const url = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL
-  if (!url) throw new Error("DATABASE_URL or TEST_DATABASE_URL is required")
+  const url = process.env.DATABASE_URL
+  if (!url) throw new Error("DATABASE_URL is required")
 
   // connection = await mysql.createConnection(url)
   // db = drizzle(connection, { schema, mode: "default" })
@@ -47,17 +47,15 @@ async function teardownTestDB() {
     "products"
   ]
 
-  await connection.execute("SET FOREIGN_KEY_CHECKS = 0")
   for (const table of tablesToTruncate) {
-    await connection.execute(`TRUNCATE TABLE ${table}`)
+    await connection.execute(`TRUNCATE TABLE ${table} CASCADE`)
   }
-  await connection.execute("SET FOREIGN_KEY_CHECKS = 1")
   // await connection.end()
 }
 
 // not use on routes tests because the tests use fastify cookies
 async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
-  await db.execute("START TRANSACTION")
+  await db.execute("BEGIN")
   try {
     const result = await fn()
     await db.execute("ROLLBACK")

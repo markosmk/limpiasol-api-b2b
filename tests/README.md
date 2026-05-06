@@ -56,10 +56,15 @@ E2E | `Vitest` + `fastify.inject()` | Rutas completas, flujos de usuario | 🐢 
 
 ### Recomendaciones
 
-Crear una DB vacía llamada database_test con el mismo schema:
+Crear una DB separada para tests en PostgreSQL. Puedes levantarla con Docker Compose:
 
 ```bash
-mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS database_test;"
-npx drizzle-kit push --config=drizzle.config.ts --env-file=.env.test
+# Levantar el contenedor de test (configurado en docker-compose.yml en el puerto 5434)
+docker compose up -d lsol-postgres-test
 
+# Sincronizar la base de datos de test
+pnpm run test:push-db
 ```
+
+Asegúrate de tener la variable en tu archivo `.env`:
+`TEST_DATABASE_URL="postgres://postgres:root@localhost:5434/ecommerce_limpiasol_test"`
