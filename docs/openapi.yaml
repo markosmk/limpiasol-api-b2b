@@ -347,15 +347,23 @@ components:
     PriceCalculationResult:
       properties:
         appliedTier:
+          enum:
+            - retail
+            - reseller
           type: string
-        discountApplied:
+        currency:
+          example: ARS
+          type: string
+        finalSubtotal:
+          type: number
+        hasDiscount:
           type: boolean
         note:
           type: string
-        total:
-          type: string
+        originalPrice:
+          type: number
         unitPrice:
-          type: string
+          type: number
       type: object
     PriceTier:
       properties:
@@ -2239,7 +2247,7 @@ paths:
       tags:
         - Admin - Products
   /products/{productId}/price:
-    post:
+    get:
       description: >
         Calcula el precio unitario y total basado en el tier del usuario
         (retail/reseller),
@@ -2253,22 +2261,19 @@ paths:
           required: true
           schema:
             type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              properties:
-                quantity:
-                  description: Cantidad de unidades a comprar
-                  minimum: 1
-                  type: integer
-                variantId:
-                  description: ID de la variante específica (opcional)
-                  type: string
-              required:
-                - quantity
-              type: object
-        required: true
+        - description: Cantidad de unidades a comprar
+          in: query
+          name: quantity
+          required: true
+          schema:
+            minimum: 1
+            type: integer
+        - description: ID de la variante específica (opcional)
+          in: query
+          name: variantId
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           content:

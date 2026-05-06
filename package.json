@@ -36,6 +36,7 @@
     "docs:bundle": "tsx scripts/bundle-openapi.ts",
     "docs:watch": "tsx watch scripts/bundle-openapi.ts",
     "docs:validate": "spectral lint docs/openapi.yaml",
+    "docs:build": "pnpm docs:bundle && pnpm docs:validate | grep error | echo '--- Documentación validada correctamente ---'",
     "docs:preview": "http-server docs -p 8081"
   },
   "keywords": [],

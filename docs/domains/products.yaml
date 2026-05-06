@@ -68,7 +68,7 @@ paths:
               schema: { $ref: "../openapi.base.yaml#/components/schemas/Error" }
 
   /products/{productId}/price:
-    post:
+    get:
       summary: Calcular precio real
       description: |
         Calcula el precio unitario y total basado en el tier del usuario (retail/reseller),
@@ -80,16 +80,16 @@ paths:
           in: path
           required: true
           schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [quantity]
-              properties:
-                variantId: { type: string, description: "ID de la variante específica (opcional)" }
-                quantity: { type: integer, minimum: 1, description: "Cantidad de unidades a comprar" }
+        - name: quantity
+          in: query
+          required: true
+          description: "Cantidad de unidades a comprar"
+          schema: { type: integer, minimum: 1 }
+        - name: variantId
+          in: query
+          required: false
+          description: "ID de la variante específica (opcional)"
+          schema: { type: string }
       responses:
         "200":
           description: Cálculo de precio exitoso.
@@ -183,8 +183,10 @@ components:
     PriceCalculationResult:
       type: object
       properties:
-        unitPrice: { type: string }
-        total: { type: string }
-        discountApplied: { type: boolean }
-        appliedTier: { type: string }
+        unitPrice: { type: number }
+        currency: { type: string, example: "ARS" }
+        originalPrice: { type: number }
+        appliedTier: { type: string, enum: [retail, reseller] }
+        finalSubtotal: { type: number }
+        hasDiscount: { type: boolean }
         note: { type: string }
