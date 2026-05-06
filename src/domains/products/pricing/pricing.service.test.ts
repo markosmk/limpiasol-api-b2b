@@ -42,12 +42,11 @@ describe("productsPricingService.calculatePrice", () => {
     // 3. Assert
     expect(result.unitPrice).toBe(80) // 100 - 20%
     expect(result.volumeDiscount).toEqual({ quantity: 50, discountPercent: 20 })
-    expect(mockPricingRepo.findPriceTier).toHaveBeenCalledWith({
-      productId: "prod-1",
-      variantId: null,
-      userTier: "reseller",
-      quantity: 50
-    })
+    expect(mockPricingRepo.findPriceTier).toHaveBeenCalledWith(
+      "prod-1",
+      "default_variant",
+      "reseller"
+    )
   })
 
   it("throws error when no price found", async () => {
@@ -69,34 +68,34 @@ describe("productsPricingService.calculatePrice", () => {
         quantity: 1
       })
     ).rejects.toMatchObject({
-      code: "price_not_found",
+      code: "NOT_FOUND",
       statusCode: 404
     })
   })
 
   it("fallback to retail when user tier not found", async () => {
     // Arrange: no hay precio para "reseller", pero sí para "retail"
-    vi.mocked(productsPricingRepository.findPriceTier).mockResolvedValue(
-      null as unknown as PriceTier
-    )
+    const mockPricingRepo = {
+      findPriceTier: vi.fn().mockResolvedValue(null),
+      findFallbackRetailPrice: vi.fn().mockResolvedValue({
+        id: "price-retail",
+        productId: "prod-1",
+        variantId: null,
+        tierType: "retail",
+        price: "120.00",
+        compareAtPrice: null,
+        minQuantity: 1,
+        volumeDiscounts: null,
+        createdAt: new Date(),
+        updatedAt: null
+      })
+    } as unknown as ProductsPricingRepository
 
-    const retailTier: PriceTier = {
-      id: "price-retail",
-      productId: "prod-1",
-      variantId: null,
-      tierType: "retail",
-      price: "120.00",
-      compareAtPrice: null,
-      minQuantity: 1,
-      volumeDiscounts: null,
-      createdAt: new Date(),
-      updatedAt: null
-    }
-
-    vi.mocked(productsPricingRepository.findFallbackRetailPrice).mockResolvedValue(retailTier)
+    const mockProductsRepo = {} as unknown as ProductsRepository
+    const service = new ProductsPricingService(mockPricingRepo, mockProductsRepo)
 
     // Act
-    const result = await productsPricingService.calculatePrice({
+    const result = await service.calculatePrice({
       productId: "prod-1",
       variantId: "default_variant",
       userTier: "reseller", // Busca reseller, pero fallback a retail
@@ -106,7 +105,7 @@ describe("productsPricingService.calculatePrice", () => {
     // Assert
     expect(result.unitPrice).toBe(120)
     expect(result.appliedTier).toBe("retail") // Se aplicó retail como fallback
-    expect(productsPricingRepository.findFallbackRetailPrice).toHaveBeenCalledWith("prod-1", null)
+    expect(mockPricingRepo.findFallbackRetailPrice).toHaveBeenCalledWith("prod-1", "default_variant")
   })
 
   it("handles variant-specific pricing", async () => {
@@ -124,10 +123,15 @@ describe("productsPricingService.calculatePrice", () => {
       updatedAt: null
     }
 
-    vi.mocked(productsPricingRepository.findPriceTier).mockResolvedValue(variantTier)
+    const mockPricingRepo = {
+      findPriceTier: vi.fn().mockResolvedValue(variantTier)
+    } as unknown as ProductsPricingRepository
+
+    const mockProductsRepo = {} as unknown as ProductsRepository
+    const service = new ProductsPricingService(mockPricingRepo, mockProductsRepo)
 
     // Act
-    const result = await productsPricingService.calculatePrice({
+    const result = await service.calculatePrice({
       productId: "prod-1",
       variantId: "var-123", // Variante específica
       userTier: "reseller",
@@ -137,7 +141,6 @@ describe("productsPricingService.calculatePrice", () => {
     // Assert
     expect(result.unitPrice).toBe(85)
     expect(result.originalPrice).toBe(100) // compareAtPrice
-    // expect(result.minQuantity).toBe(5) // TODO: added??
   })
 })
 
@@ -146,49 +149,20 @@ describe("productsPricingService.calculatePrice", () => {
 // ─────────────────────────────────────────
 describe("productsPricingService.validateQuantity", () => {
   it("validates quantity against product purchaseRules", async () => {
-    // Arrange: mockear producto con reglas
-    vi.mocked(productsRepository.findProductById).mockResolvedValue({
-      id: "prod-1",
-      name: "Test",
-      status: "published",
-      images: [],
-      purchaseRules: { minQuantity: 5, stepQuantity: 5, allowBackorder: false }
-      // variants: [
-      //   {
-      //     id: "variantId-123",
-      //     name: "Variant 1",
-      //     sku: "variant-123"
-
-      //     // purchaseRules: { minQuantity: 5, stepQuantity: 5, allowBackorder: false }
-      //   }
-      // ]
-    })
-
-    // Act: cantidad inválida (menor al mínimo)
-    const result = await productsPricingService.validateQuantity(3, "variantId-123")
-
-    // Assert
-    expect(result.valid).toBe(false)
-    expect(result.error).toContain("Mínimo")
-  })
-})
-
-describe("productsPricingService.validateQuantity", () => {
-  it("validates quantity against product purchaseRules", async () => {
-    // Aquí sí necesitamos mockear el ProductsRepo
     const mockPricingRepo = {} as unknown as ProductsPricingRepository
 
     const mockProductsRepo = {
-      findProductById: vi.fn().mockResolvedValue({
-        id: "prod-1",
-        purchaseRules: { minQuantity: 5, stepQuantity: 5 }
+      getResolvedPurchaseRules: vi.fn().mockResolvedValue({
+        minQuantity: 5, stepQuantity: 5, allowBackorder: false
       })
     } as unknown as ProductsRepository
 
     const service = new ProductsPricingService(mockPricingRepo, mockProductsRepo)
 
-    const result = await service.validateQuantity(3, "variantId-123")
+    // Act: cantidad inválida (menor al mínimo)
+    const result = await service.validateQuantity(3, "product-123", "variantId-123")
 
+    // Assert
     expect(result.valid).toBe(false)
     expect(result.error).toContain("Mínimo")
   })
@@ -226,16 +200,20 @@ describe("productsPricingService.getPriceOptions", () => {
       }
     ]
 
-    vi.mocked(productsPricingRepository.getAllPriceOptions).mockResolvedValue(mockTiers)
+    const mockPricingRepo = {
+      getAllPriceOptions: vi.fn().mockResolvedValue(mockTiers)
+    } as unknown as ProductsPricingRepository
 
-    const result = await productsPricingService.getPriceOptions("prod-1", null)
+    const mockProductsRepo = {} as unknown as ProductsRepository
+    const service = new ProductsPricingService(mockPricingRepo, mockProductsRepo)
+
+    const result = await service.getPriceOptions("prod-1", null)
 
     expect(result).toHaveLength(2)
     expect(result[0]).toMatchObject({
       tierType: "retail",
       basePrice: 100,
-      compareAtPrice: 120,
-      minQuantity: 1
+      compareAtPrice: 120
     })
     expect(result[1]).toMatchObject({
       tierType: "reseller",

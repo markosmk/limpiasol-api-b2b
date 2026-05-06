@@ -11,7 +11,7 @@ export class ProductsPricingRepository {
    * Busca el tier de precio para un producto/variante + tipo de usuario
    * Prioriza: variante específica > producto base (variantId = NULL)
    */
-  async findPriceTier(productId: string, variantId: string, userTier: UserTier) {
+  async findPriceTier(productId: string, variantId: string | null, userTier: UserTier) {
     // Primero intentamos con variante específica
     if (variantId) {
       const tier = await this.database.query.priceTiers.findFirst({

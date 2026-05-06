@@ -51,41 +51,56 @@ export class ProductsPricingService {
    * Retorna un Record/Diccionario donde la key es el variantId.
    */
   async calculatePricesBulk(
-    items: Array<{ variantId: string; quantity: number }>,
+    items: Array<{ productId: string; variantId: string | null; quantity: number }>,
     userTier: UserTier
   ): Promise<Record<string, PricingResult>> {
     if (items.length === 0) return {}
 
-    const variantIds = items.map((i) => i.variantId)
-
-    // 1. Un solo viaje a la BD para traer todos los precios (tier actual y retail)
-    const allTiers = await this.repository.findPriceTiersBulk(variantIds, userTier)
+    const productIds = Array.from(new Set(items.map((i) => i.productId)))
+    
+    // 1. Un solo viaje a la BD para traer todos los precios (tier actual y retail) de los productos
+    const allTiers = await this.repository.findTiersForProductsBulk(productIds, userTier)
 
     const bulkResults: Record<string, PricingResult> = {}
 
     // 2. Procesamos en memoria
     for (const item of items) {
-      // Intentamos buscar el precio específico del tier
-      let tier = allTiers.find((t) => t.variantId === item.variantId && t.tierType === userTier)
+      let tier: PriceTier | undefined
       let appliedTier = userTier
 
-      // Fallback a retail si no existe el tier específico
+      // A. Buscar tier específico de la variante (si aplica)
+      if (item.variantId) {
+        tier = allTiers.find((t) => t.variantId === item.variantId && t.tierType === userTier)
+        if (!tier) {
+          tier = allTiers.find((t) => t.variantId === item.variantId && t.tierType === "retail")
+          if (tier) appliedTier = "retail"
+        }
+      }
+
+      // B. Fallback al tier base del producto
       if (!tier) {
-        tier = allTiers.find((t) => t.variantId === item.variantId && t.tierType === "retail")
-        appliedTier = "retail"
+        tier = allTiers.find((t) => t.productId === item.productId && t.variantId === null && t.tierType === userTier)
+        appliedTier = userTier
+      }
+
+      // C. Fallback final al retail base del producto
+      if (!tier) {
+        tier = allTiers.find((t) => t.productId === item.productId && t.variantId === null && t.tierType === "retail")
+        if (tier) appliedTier = "retail"
       }
 
       if (!tier) {
-        // Si no hay precio ni de retail, podrías lanzar error o devolver un resultado inválido
         throw new AppError({
           code: "price_not_found",
-          message: `No hay precio disponible para la variante ${item.variantId}`,
+          message: `No hay precio disponible para la variante ${item.variantId || 'base'}`,
           statusCode: 404
         })
       }
 
-      // 3. Reutilizamos tu lógica exacta de descuentos por volumen
-      bulkResults[item.variantId] = this._buildPricingResult(tier, item.quantity, appliedTier)
+      // 3. Reutilizamos lógica de descuentos por volumen
+      // Usamos el variantId o productId como key dependiendo de qué estemos procesando
+      const key = item.variantId || item.productId
+      bulkResults[key] = this._buildPricingResult(tier, item.quantity, appliedTier)
     }
 
     return bulkResults
@@ -95,8 +110,8 @@ export class ProductsPricingService {
    * Valida si una cantidad cumple las reglas de compra del producto
    * (purchaseRules JSON)
    */
-  async validateQuantity(quantity: number, variantId: string): Promise<PriceValidationResult> {
-    const activeRules = await this.productsRepo.getResolvedPurchaseRules(variantId)
+  async validateQuantity(quantity: number, productId: string, variantId: string | null): Promise<PriceValidationResult> {
+    const activeRules = await this.productsRepo.getResolvedPurchaseRules(productId, variantId)
     if (!activeRules) {
       return {
         valid: false,

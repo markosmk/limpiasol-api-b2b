@@ -2,7 +2,7 @@ export type UserTier = "retail" | "wholesale" | "reseller" | "vip"
 
 export type PricingContext = {
   productId: string
-  variantId: string
+  variantId: string | null
   userTier: UserTier
   quantity: number
 }
