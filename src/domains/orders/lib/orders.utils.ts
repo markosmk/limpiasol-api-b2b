@@ -64,13 +64,15 @@ export function calculateOrderTotals(input: CalculateTotalsInput): {
 
   const total = subtotal - discounts + shippingCost + taxes
 
+  const formatWithRounding = (num: number) => (Math.round((num + Number.EPSILON) * 100) / 100).toFixed(2)
+
   // Retornar como string con 2 decimales para precisión en DB decimal(12,2)
   return {
-    subtotal: subtotal.toFixed(2),
-    discounts: discounts.toFixed(2),
-    shippingCost: shippingCost.toFixed(2),
-    taxes: taxes.toFixed(2),
-    total: total.toFixed(2)
+    subtotal: formatWithRounding(subtotal),
+    discounts: formatWithRounding(discounts),
+    shippingCost: formatWithRounding(shippingCost),
+    taxes: formatWithRounding(taxes),
+    total: formatWithRounding(total)
   }
 }
 
