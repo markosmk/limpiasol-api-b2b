@@ -3,9 +3,18 @@ import * as v from "valibot"
 import { moduleNames } from "@/utils/modules/module-schemas"
 
 export const updateSettingsSchema = v.object({
-  key: v.pipe(v.string(), v.nonEmpty()),
+  key: v.pipe(
+    v.string(),
+    v.nonEmpty(),
+    v.check((input) => !input.startsWith("modules:"), "Los módulos deben actualizarse desde su propia ruta")
+  ),
   value: v.unknown(),
-  category: v.optional(v.string())
+  category: v.optional(
+    v.pipe(
+      v.string(),
+      v.check((input) => input !== "modules", "Los módulos deben actualizarse desde su propia ruta")
+    )
+  )
 })
 
 export type UpdateSettingsInput = v.InferOutput<typeof updateSettingsSchema>

@@ -181,6 +181,7 @@ describe("Admin Domain - Rutas de Configuración", () => {
           config: {
             provider: "brevo",
             credentials: {
+              apiKey: "test_api_key",
               fromName: "Ventas",
               fromEmail: "test@ventas.com"
             }
