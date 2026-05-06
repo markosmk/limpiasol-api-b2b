@@ -2,6 +2,7 @@ import {
   type ProductsPricingService,
   productsPricingService
 } from "../products/pricing/pricing.service"
+import { productsRepository } from "../products/products.repository"
 import { type CartsRepository, cartsRepository } from "./carts.repository"
 import type { UserTier } from "../products/pricing/pricing.types"
 import type { AddToCartInput } from "./carts.schema"
@@ -30,6 +31,7 @@ export class CartsService {
 
     // 1. Pasamos el array limpio al servicio de pricing (sin Promise.all)
     const itemsToCalculate = cart.items.map((i) => ({
+      productId: i.variant.productId,
       variantId: i.variantId,
       quantity: i.quantity
     }))
@@ -71,7 +73,14 @@ export class CartsService {
     const newTotalQuantity = (existingItem?.quantity || 0) + data.quantity
 
     // 1. Validar reglas de compra ANTES de hacer nada
-    const validation = await this.pricingService.validateQuantity(newTotalQuantity, data.variantId)
+    const variantInfo = await productsRepository.findVariantWithProduct(data.variantId)
+    if (!variantInfo) throw new AppError({ code: "NOT_FOUND", message: "Variante no encontrada." })
+
+    const validation = await this.pricingService.validateQuantity(
+      newTotalQuantity,
+      variantInfo.product.id,
+      data.variantId
+    )
 
     if (!validation.valid) {
       throw new AppError({
@@ -102,7 +111,15 @@ export class CartsService {
     // Validar reglas si la cantidad no es 0
     if (quantity > 0) {
       // Aquí validamos directamente la cantidad entrante porque es una sobrescritura absoluta
-      const validation = await this.pricingService.validateQuantity(quantity, variantId)
+      const variantInfo = await productsRepository.findVariantWithProduct(variantId)
+      if (!variantInfo)
+        throw new AppError({ code: "NOT_FOUND", message: "Variante no encontrada." })
+
+      const validation = await this.pricingService.validateQuantity(
+        quantity,
+        variantInfo.product.id,
+        variantId
+      )
       if (!validation.valid) {
         throw new AppError({ code: "VALIDATION_RULES", message: validation.error })
       }

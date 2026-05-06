@@ -187,6 +187,78 @@ describe("Carts Routes (Integration)", () => {
     expect(response.statusCode).toBe(200)
   })
 
+  it("POST /carts/items - debe fallar si el producto no está publicado (Draft)", async () => {
+    // Creamos un producto en draft manualmente
+    const [{ id: draftProdId }] = await db
+      .insert(products)
+      .values({
+        name: "Producto Borrador",
+        slug: "draft-product",
+        status: "draft"
+      })
+      .returning({ id: products.id })
+
+    const [{ id: draftVarId }] = await db
+      .insert(productVariants)
+      .values({
+        id: "ncx076a086y692a7y9999999", // cuid2 valid
+        productId: draftProdId,
+        sku: "DRAFT-SKU",
+        name: "Default",
+        options: { color: "borrador" }
+      })
+      .returning({ id: productVariants.id })
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/carts/items",
+      payload: { variantId: draftVarId, quantity: 1 },
+      cookies: { session: customerSessionId }
+    })
+
+    expect(response.statusCode).toBe(400)
+    const body = JSON.parse(response.body)
+    expect(body.code).toBe("VALIDATION_RULES")
+    expect(body.message).toContain("encontrada")
+  })
+
+  it("POST /carts/items - debe sumar cantidades y validar el total contra maxQuantity", async () => {
+    // p2 tiene maxQuantity: 20
+    // 1. Agregamos 10 (ok)
+    await app.inject({
+      method: "POST",
+      url: "/carts/items",
+      payload: { variantId: p2.variantId, quantity: 10 },
+      cookies: { session: customerSessionId }
+    })
+
+    // 2. Intentamos agregar 11 más (Total 21 > 20) -> debe fallar
+    const response = await app.inject({
+      method: "POST",
+      url: "/carts/items",
+      payload: { variantId: p2.variantId, quantity: 11 },
+      cookies: { session: customerSessionId }
+    })
+
+    expect(response.statusCode).toBe(400)
+    const body = JSON.parse(response.body)
+    expect(body.code).toBe("VALIDATION_RULES")
+    expect(body.message).toContain("Máximo")
+  })
+
+  it("POST /carts/items - debe fallar si la variante no existe", async () => {
+    const validCuid2 = "ncx076a086y692a7y1234567" // Formato válido para Valibot
+    const response = await app.inject({
+      method: "POST",
+      url: "/carts/items",
+      payload: { variantId: validCuid2, quantity: 1 },
+      cookies: { session: customerSessionId }
+    })
+
+    expect(response.statusCode).toBe(404)
+    expect(JSON.parse(response.body).message).toContain("encontrada")
+  })
+
   // --- TESTS DE HIDRATACIÓN ---
 
   it("GET /carts - debe retornar el carrito hidratado con precios dinámicos", async () => {

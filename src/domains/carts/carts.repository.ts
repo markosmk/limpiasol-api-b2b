@@ -12,7 +12,11 @@ export class CartsRepository {
   async findActiveCartByUserId(userId: string) {
     return this.database.query.carts.findFirst({
       where: and(eq(carts.userId, userId), eq(carts.status, "active")),
-      with: { items: true }
+      with: { 
+        items: {
+          with: { variant: { columns: { productId: true } } }
+        }
+      }
     })
   }
 
@@ -25,7 +29,11 @@ export class CartsRepository {
 
     return await this.database.query.carts.findFirst({
       where: and(eq(carts.userId, userId), eq(carts.id, cart.id), eq(carts.status, "active")),
-      with: { items: true }
+      with: { 
+        items: {
+          with: { variant: { columns: { productId: true } } }
+        }
+      }
     })
   }
 
