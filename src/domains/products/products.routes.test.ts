@@ -146,7 +146,6 @@ describe("GET /products/:productId/price", () => {
 
     expect(response.statusCode).toBe(403)
     const body = response.json()
-    console.log({ body })
     expect(body.success).toBe(false)
     expect(body.error).toBe("Precio oculto")
   })

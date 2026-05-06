@@ -33,12 +33,20 @@ export abstract class BaseModule<TConfig> {
    */
   constructor(protected moduleName: string) {
     // cada módulo se suscribe a sus propias actualizaciones al nacer
-    appEvents.on(EventTypes.MODULE_CONFIG_UPDATED, (updatedModuleName) => {
+    // appEvents.on(EventTypes.MODULE_CONFIG_UPDATED, (updatedModuleName) => {
+    //   if (this.moduleName === updatedModuleName) {
+    //     console.log(`[BaseModule] Recargando caché para módulo: ${this.moduleName}`)
+    //     this.refreshConfig().catch(console.error)
+    //   }
+    // })
+
+    const handler = (updatedModuleName: string) => {
       if (this.moduleName === updatedModuleName) {
-        console.log(`[BaseModule] Recargando caché para módulo: ${this.moduleName}`)
         this.refreshConfig().catch(console.error)
       }
-    })
+    }
+
+    appEvents.on(EventTypes.MODULE_CONFIG_UPDATED, handler)
   }
 
   /**

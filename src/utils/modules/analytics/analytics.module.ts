@@ -213,7 +213,7 @@ export class AnalyticsModule extends BaseModule<AnalyticsModuleConfig> {
     }
 
     // Implementación simplificada del Measurement Protocol
-    const payload = {
+    const _payload = {
       client_id: event.properties?.clientId ?? "server",
       events: [
         {
@@ -233,8 +233,7 @@ export class AnalyticsModule extends BaseModule<AnalyticsModuleConfig> {
     //   method: "POST",
     //   body: JSON.stringify(payload)
     // })
-
-    console.log("[GA4 Event]:", payload)
+    // console.log("[GA4 Event]:", payload)
     return { success: true, provider: "google" }
   }
 
@@ -251,7 +250,7 @@ export class AnalyticsModule extends BaseModule<AnalyticsModuleConfig> {
       return { success: true, provider: "google" }
     }
 
-    console.log("[GA4 PageView]:", path, options)
+    // console.log("[GA4 PageView]:", path, options)
     return { success: true, provider: "google" }
   }
 
@@ -277,20 +276,20 @@ export class AnalyticsModule extends BaseModule<AnalyticsModuleConfig> {
       })
     }
 
-    console.log("[Plausible Event]:", event)
+    // console.log("[Plausible Event]:", event)
     return { success: true, provider: "plausible" }
   }
 
   private async _trackPlausiblePageView(
-    path: string,
-    options?: { title?: string; referrer?: string }
+    _path: string,
+    _options?: { title?: string; referrer?: string }
   ): Promise<TrackResult> {
     if (typeof window !== "undefined" && (window as any).plausible) {
       ;(window as any).plausible("pageview")
       return { success: true, provider: "plausible" }
     }
 
-    console.log("[Plausible PageView]:", path, options)
+    // console.log("[Plausible PageView]:", path, options)
     return { success: true, provider: "plausible" }
   }
 
@@ -300,20 +299,20 @@ export class AnalyticsModule extends BaseModule<AnalyticsModuleConfig> {
       return { success: true, provider: "umami" }
     }
 
-    console.log("[Umami Event]:", event)
+    // console.log("[Umami Event]:", event)
     return { success: true, provider: "umami" }
   }
 
   private async _trackUmamiPageView(
     path: string,
-    options?: { title?: string }
+    _options?: { title?: string }
   ): Promise<TrackResult> {
     if (typeof window !== "undefined" && (window as any).umami) {
       ;(window as any).umami.view(path)
       return { success: true, provider: "umami" }
     }
 
-    console.log("[Umami PageView]:", path, options)
+    // console.log("[Umami PageView]:", path, options)
     return { success: true, provider: "umami" }
   }
 }
