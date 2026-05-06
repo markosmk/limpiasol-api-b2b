@@ -88,6 +88,7 @@ export default async function productsRoutes(app: FastifyInstance) {
    */
   /**
    * GET /:productId/price?variantId=xyz&quantity=10
+   * se usa GET, por semantica, idempotencia, cacheabilidad, logs y debug (la url cmpleta aparece en el log del server)
    * * En producto detalle (frontend):
    * const res = await api.get(`/products/${id}/price?variantId=${variantId}&quantity=1`)
    * * En carrito (frontend):
@@ -98,30 +99,25 @@ export default async function productsRoutes(app: FastifyInstance) {
     {
       schema: {
         querystring: v.object({
-          variantId: v.pipe(v.string(), v.cuid2()),
-          quantity: v.optional(v.pipe(v.string(), v.transform(Number)))
+          variantId: v.optional(v.nullable(v.pipe(v.string(), v.cuid2()))),
+          quantity: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(1)))
         })
       },
       preHandler: optionalAuth
     },
     async (request, reply) => {
       const { productId } = request.params as { productId: string }
-      // Obtenemos los datos de la query. Todo llega como string.
-      const { variantId, quantity: rawQuantity } = request.query as {
-        variantId?: string
+
+      const { variantId: rawVariantId, quantity: rawQuantity } = request.query as {
+        variantId: string | null
         quantity?: string
       }
 
-      if (!variantId) {
-        return reply.code(400).send({
-          success: false,
-          error: "Falta la variante",
-          suggestion: "Debes proveer un variantId en la URL"
-        })
-      }
+      // unnecesary only for security, valibot valid same
+      const variantId = rawVariantId?.trim() && rawVariantId !== "null" ? rawVariantId : null
 
-      // Parseamos la cantidad (si no la envían, asumimos 1 por defecto)
-      const quantity = rawQuantity ? parseInt(rawQuantity, 10) : 1
+      // unnecesary only for security, valibot valid same
+      const quantity = parseInt(rawQuantity || "1", 10)
       if (Number.isNaN(quantity) || quantity < 1) {
         return reply.code(400).send({
           success: false,
@@ -148,7 +144,11 @@ export default async function productsRoutes(app: FastifyInstance) {
       }
 
       try {
-        const validation = await productsPricingService.validateQuantity(quantity, variantId)
+        const validation = await productsPricingService.validateQuantity(
+          quantity,
+          productId,
+          variantId || null
+        )
         if (!validation.valid) {
           // error Code ORDER_INVALID_QUANTITY
           return reply.code(validation.code === "not_found" ? 404 : 400).send({

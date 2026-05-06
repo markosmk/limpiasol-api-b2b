@@ -8,13 +8,27 @@ import type { FastifyInstance } from "fastify"
 import { priceTiers, productImages, products, productVariants } from "@/db/pg"
 import productsRoutes from "@/domains/products/products.routes"
 
+function expectValidationError(
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation >
+  response: any,
+  expectedField: string
+) {
+  expect(response.statusCode).toBe(400)
+  const body = response.json()
+  expect(body.code).toBe("VALIDATION_ERROR")
+  expect(body.issues).toBeDefined()
+  expect(body.issues).toHaveProperty(expectedField)
+  expect(Array.isArray(body.issues[expectedField])).toBe(true)
+  return body
+}
+
 async function cleanPricingTables() {
   await db.delete(priceTiers).execute()
   await db.delete(productVariants).execute()
   await db.delete(products).execute()
 }
 
-describe("POST /products/:productId/price", () => {
+describe("GET /products/:productId/price", () => {
   let app: FastifyInstance
   let testProduct: typeof products.$inferSelect
   let testVariant: typeof productVariants.$inferSelect
@@ -46,6 +60,7 @@ describe("POST /products/:productId/price", () => {
         name: "Producto B2B Test",
         slug: `producto-b2b-${Date.now()}`,
         status: "published",
+        isPricePublic: true,
         purchaseRules: { minQuantity: 5, stepQuantity: 5, maxQuantity: 100 }
       })
       .returning({ id: products.id })
@@ -79,7 +94,7 @@ describe("POST /products/:productId/price", () => {
   // ─────────────────────────────────────────
   // Escenario 1: Usuario anónimo (retail)
   // ─────────────────────────────────────────
-  it("returns calculated price for ANONYMOUS user (retail tier)", async () => {
+  it("devolver precio calculado para usuario anónimo (retail tier)", async () => {
     // Arrange: insertar precio RETAIL (no reseller)
     await db.insert(priceTiers).values({
       productId: testProduct.id,
@@ -92,9 +107,12 @@ describe("POST /products/:productId/price", () => {
 
     // Act: SIN cookie de sesión (usuario anónimo)
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { variantId: null, quantity: 10 }
+      query: {
+        // variantId: "", // no hay variante, no enviar esta prop
+        quantity: "10"
+      }
       // Sin cookies → userTier = "retail"
     })
 
@@ -114,11 +132,55 @@ describe("POST /products/:productId/price", () => {
     // })
   })
 
+  it("retorna 403 cuando el producto no tiene precio público y el usuario es anónimo", async () => {
+    // Setup: producto con precio oculto
+    await db.update(products).set({ isPricePublic: false }).where(eq(products.id, testProduct.id))
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/products/${testProduct.id}/price`,
+      query: {
+        quantity: "5"
+      }
+    })
+
+    expect(response.statusCode).toBe(403)
+    const body = response.json()
+    console.log({ body })
+    expect(body.success).toBe(false)
+    expect(body.error).toBe("Precio oculto")
+  })
+
+  it("cae en retail cuando la sesión es inválida o expirada (cookie corrupta)", async () => {
+    // Setup: precio retail disponible
+    await db.insert(priceTiers).values({
+      productId: testProduct.id,
+      variantId: null,
+      tierType: "retail",
+      price: "100.00"
+    })
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/products/${testProduct.id}/price`,
+      query: {
+        quantity: "5"
+      },
+      cookies: { session: "sesion-inexistente-o-corrupta" }
+    })
+
+    // optionalAuth falla silenciosamente -> request.user = null -> tier retail
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.data.pricing.appliedTier).toBe("retail")
+    expect(body.data.pricing.unitPrice).toBe(100)
+  })
+
   // ─────────────────────────────────────────
   // Escenario 1: Usuario autenticado (reseller)
   // ─────────────────────────────────────────
 
-  it("returns calculated price for authenticated reseller", async () => {
+  it("devolver precio calculado para usuario autenticado (reseller)", async () => {
     // create user and sesion
     const { sessionId, cleanup: userCleanup } = await createTestUserAndSession("reseller")
     // set cleanup function
@@ -133,11 +195,11 @@ describe("POST /products/:productId/price", () => {
 
     // Act: hacer request a la ruta
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: {
-        variantId: null,
-        quantity: 10
+      query: {
+        // variantId: "", // no hay variante, no enviar esta prop
+        quantity: "10"
       },
       cookies: { session: sessionId }
     })
@@ -167,9 +229,12 @@ describe("POST /products/:productId/price", () => {
 
     // Cantidad que aplica 10% de descuento
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { quantity: 25 }
+      query: {
+        // no se envia variantId porque no hay variante
+        quantity: "25"
+      }
     })
 
     // Assert
@@ -185,15 +250,44 @@ describe("POST /products/:productId/price", () => {
     expect(body.data.pricing.finalSubtotal).toBe(2250) // 90 * 25
   })
 
+  it("elige el descuento más alto aplicable cuando hay múltiples escalones", async () => {
+    await db.insert(priceTiers).values({
+      productId: testProduct.id,
+      variantId: null,
+      tierType: "retail",
+      price: "100.00",
+      volumeDiscounts: [
+        { quantity: 10, discountPercent: 10 },
+        { quantity: 20, discountPercent: 20 },
+        { quantity: 50, discountPercent: 30 }
+      ]
+    })
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/products/${testProduct.id}/price`,
+      query: {
+        quantity: "25" // Aplica el de 20 (>=20 y <50)
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.data.pricing.unitPrice).toBe(80) // 100 - 20%
+    expect(body.data.pricing.volumeDiscount.discountPercent).toBe(20)
+  })
+
   // ─────────────────────────────────────────
   // Escenario 3: Validación de reglas B2B
   // ─────────────────────────────────────────
   it("rechaza cantidad menor al mínimo configurado", async () => {
     // Producto con minQuantity: 5
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { quantity: 3 } // Menos del mínimo
+      query: {
+        quantity: "3"
+      } // Menos del mínimo
     })
 
     expect(response.statusCode).toBe(400)
@@ -206,15 +300,58 @@ describe("POST /products/:productId/price", () => {
   it("rechaza cantidad que no cumple stepQuantity", async () => {
     // Producto con stepQuantity: 5
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { quantity: 12 } // No es múltiplo de 5
+      query: {
+        quantity: "12" // No es múltiplo de 5
+      }
     })
 
     expect(response.statusCode).toBe(400)
     const body = response.json()
     expect(body.error).toContain("múltiplo de 5")
     expect(body.suggestion).toContain("15") // Próximo múltiplo
+  })
+
+  it("acepta cantidad exactamente en el límite permitido (ej: maxQuantity)", async () => {
+    await db.insert(priceTiers).values({
+      productId: testProduct.id,
+      variantId: null,
+      tierType: "retail",
+      price: "100.00"
+    })
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/products/${testProduct.id}/price`,
+      query: {
+        quantity: "100" // El máximo es 100
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json().data.pricing.finalSubtotal).toBe(10000)
+  })
+
+  it("no acepta cantidad que sobrepasa el límite permitido (ej: maxQuantity)", async () => {
+    await db.insert(priceTiers).values({
+      productId: testProduct.id,
+      variantId: null,
+      tierType: "retail",
+      price: "100.00"
+    })
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/products/${testProduct.id}/price`,
+      query: {
+        quantity: "101" // Mayor al máximo, el maximo es 100
+      }
+    })
+
+    expect(response.statusCode).toBe(400)
+    const body = response.json()
+    expect(body.error).toContain("Máximo 100 unidades")
   })
 
   // ─────────────────────────────────────────
@@ -230,9 +367,12 @@ describe("POST /products/:productId/price", () => {
 
     // update rulesMin MAx.. min stablecide en 5..
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { variantId: testVariant.id, quantity: 5 }
+      query: {
+        variantId: testVariant.id,
+        quantity: "5"
+      }
     })
 
     const body = response.json()
@@ -260,9 +400,11 @@ describe("POST /products/:productId/price", () => {
     })
 
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { quantity: 5 },
+      query: {
+        quantity: "5"
+      },
       cookies: { session: sessionId }
     })
 
@@ -279,9 +421,11 @@ describe("POST /products/:productId/price", () => {
     await db.delete(priceTiers).where(eq(priceTiers.productId, testProduct.id))
 
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { quantity: 5 }
+      query: {
+        quantity: "5"
+      }
     })
 
     expect(response.statusCode).toBe(404)
@@ -291,12 +435,42 @@ describe("POST /products/:productId/price", () => {
   })
 
   it("retorna 404 cuando el producto no existe", async () => {
+    const { sessionId, cleanup: userCleanup } = await createTestUserAndSession("reseller")
+    cleanup = userCleanup
+
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/product-no-existe/price`,
-      payload: { quantity: 1 }
+      query: {
+        quantity: "1"
+      },
+      cookies: { session: sessionId }
     })
 
+    expect(response.statusCode).toBe(404)
+  })
+
+  it("retorna 404 cuando el producto está en estado 'draft'", async () => {
+    // Insertar precios primero (si no, da 404 por falta de precio)
+    await db.insert(priceTiers).values({
+      productId: testProduct.id,
+      variantId: null,
+      tierType: "retail",
+      price: "100.00"
+    })
+
+    // Cambiar producto a draft
+    await db.update(products).set({ status: "draft" }).where(eq(products.id, testProduct.id))
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/products/${testProduct.id}/price`,
+      query: {
+        quantity: "5"
+      }
+    })
+
+    // Si el producto es draft, la API debería retornar 404 o 403
     expect(response.statusCode).toBe(404)
   })
 
@@ -305,17 +479,67 @@ describe("POST /products/:productId/price", () => {
   // ─────────────────────────────────────────
   it("rechaza cantidad inválida (menor a 1)", async () => {
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { quantity: 0 }
+      query: {
+        quantity: "0"
+      }
     })
 
-    expect(response.statusCode).toBe(400)
-    const body = response.json()
-    expect(body.error).toContain("Cantidad inválida")
+    // expect(response.statusCode).toBe(400)
+    // const body = await response.json()
+
+    const body = expectValidationError(response, "quantity")
+    expect(body.issues.quantity[0]).toMatch(/number|numero|invalid/i)
+
+    // structure base checking information by Handler Valibot
+    // expect(body.statusCode).toBe(400)
+    // expect(body.code).toBe("VALIDATION_ERROR")
+    // expect(body.message).toBe("Los datos enviados no son válidos")
+    // // Verificar que existe el campo quantity en issues
+    // expect(body.issues).toBeDefined()
+    // expect(body.issues).toHaveProperty("quantity")
+    // expect(Array.isArray(body.issues.quantity)).toBe(true)
+    // expect(body.issues.quantity.length).toBeGreaterThan(0)
+    // // verificar que es un error de número, sin depender del texto exacto (apto cambios de idioma o version de valibot)
+    // const errorMessage = body.issues.quantity[0].toLowerCase()
+    // expect(
+    //   errorMessage.includes("number") ||
+    //     errorMessage.includes("numero") ||
+    //     errorMessage.includes("invalid")
+    // ).toBe(true)
   })
 
-  it("acepta variantId null explícitamente", async () => {
+  // como es por query.. la cantidad puede no ser un numero como "$10"
+  it("rechaza cantidad inválida (es texto con número o no es un numero)", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/products/${testProduct.id}/price`,
+      query: {
+        quantity: "$10"
+      }
+    })
+
+    // structure base checking information by Handler Valibot
+    const body = expectValidationError(response, "quantity")
+    expect(body.issues.quantity[0]).toMatch(/number|numero|invalid/i)
+  })
+
+  it("el variantId es un string que no es un cuid2", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: `/products/${testProduct.id}/price`,
+      query: {
+        variantId: "not-a-cuid2",
+        quantity: "1"
+      }
+    })
+
+    const body = expectValidationError(response, "variantId")
+    expect(body.issues.variantId[0]).toMatch(/cuid2|invalid/i)
+  })
+
+  it("acepta variantId vacio explícitamente en el queryparams, toma el precio base", async () => {
     await db.insert(priceTiers).values({
       productId: testProduct.id,
       variantId: null,
@@ -324,9 +548,12 @@ describe("POST /products/:productId/price", () => {
     })
 
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { variantId: null, quantity: 5 }
+      query: {
+        // not sending this property works too
+        quantity: "5"
+      }
     })
 
     expect(response.statusCode).toBe(200)
@@ -340,9 +567,11 @@ describe("POST /products/:productId/price", () => {
   // ─────────────────────────────────────────
   it("rechaza cantidad mayor al máximo permitido/configurado", async () => {
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { quantity: 101 } // Mayor al máximo, el maximo es 100
+      query: {
+        quantity: "101" // Mayor al máximo, el maximo es 100
+      }
     })
 
     expect(response.statusCode).toBe(400)
@@ -351,7 +580,7 @@ describe("POST /products/:productId/price", () => {
   })
 
   // ─────────────────────────────────────────
-  // Escenario 9: Descuento por volumne No Aclnazado
+  // Escenario 9: Descuento por volumne No Alcanzado
   // ─────────────────────────────────────────
   it("cobra precio base si la cantidad no alcanza el mínimo para descuento por volumen", async () => {
     await db.insert(priceTiers).values({
@@ -363,9 +592,11 @@ describe("POST /products/:productId/price", () => {
     })
 
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { quantity: 10 } // compra solo 10 (cumple el minQuantity de 5 (porque el producto creado tiene configurado minQuantity: 5), pero no el de volumen)
+      query: {
+        quantity: "10" // compra solo 10 (cumple el minQuantity de 5 (porque el producto creado tiene configurado minQuantity: 5), pero no el de volumen)
+      }
     })
     expect(response.statusCode).toBe(200)
     const body = response.json()
@@ -387,15 +618,40 @@ describe("POST /products/:productId/price", () => {
     })
 
     const response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: `/products/${testProduct.id}/price`,
-      payload: { variantId: testVariant.id, quantity: 5 } // pedimos la variante
+      query: {
+        variantId: testVariant.id,
+        quantity: "5" // pedimos la variante
+      }
     })
 
     expect(response.statusCode).toBe(200)
     const body = response.json()
     expect(body.data.pricing.unitPrice).toBe(100)
   })
+
+  // ─────────────────────────────────────────
+  // Escenario 11: Cache headers
+  // TODO: Implementar cache en la ruta y descomentar el test
+  // ─────────────────────────────────────────
+  // it("incluye headers de cache para respuestas exitosas", async () => {
+  //   await db.insert(priceTiers).values({
+  //     productId: testProduct.id,
+  //     variantId: null,
+  //     tierType: "retail",
+  //     price: "100.00"
+  //   })
+
+  //   const response = await app.inject({
+  //     method: "GET",
+  //     url: `/products/${testProduct.id}/price`,
+  //     query: { quantity: "5" }
+  //   })
+
+  //   expect(response.statusCode).toBe(200)
+  //   expect(response.headers["cache-control"]).toBeDefined()
+  // })
 })
 
 describe("POST /products/admin", () => {
