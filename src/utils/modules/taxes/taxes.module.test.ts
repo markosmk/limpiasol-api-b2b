@@ -4,7 +4,7 @@ import { TaxesModule } from "./taxes.module"
 import type { ModuleConfig } from "../module.types"
 import type { TaxesModuleConfig } from "./taxes.module.types"
 
-vi.mock("module-manager", () => ({
+vi.mock("../module-manager", () => ({
   moduleManager: { getConfig: vi.fn() }
 }))
 

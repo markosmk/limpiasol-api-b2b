@@ -4,7 +4,13 @@ import { moduleManager } from "../module-manager"
 import { EmailModule } from "./email.module"
 
 vi.mock("@/utils/crypto", () => ({
-  decryptFromBase64: vi.fn().mockReturnValue("fake_api_key_decrypted")
+  decryptFromBase64: vi.fn((val) => {
+    if (val === "enc_api_key") return "decrypted_api_key"
+    if (val === "enc_api_secret") return "decrypted_api_secret"
+    if (val === "enc_smtp_user") return "decrypted_smtp_user"
+    if (val === "enc_smtp_pass") return "decrypted_smtp_pass"
+    return "fake_api_key_decrypted"
+  })
 }))
 
 vi.mock("../module-manager", () => ({
@@ -126,5 +132,40 @@ describe("EmailModule - Templating Cascade", () => {
     expect(mockEmailService.sendEmail).not.toHaveBeenCalled()
 
     process.env.NODE_ENV = originalEnv
+  })
+
+  it("Debe desencriptar y pasar todas las credenciales correctas al adaptador (SES/SMTP)", async () => {
+    vi.mocked(moduleManager.getConfig).mockResolvedValue({
+      enabled: true,
+      config: {
+        provider: "smtp",
+        credentials: {
+          fromName: "T",
+          fromEmail: "t@t.com",
+          apiKeyEncrypted: "enc_api_key",
+          apiSecretEncrypted: "enc_api_secret",
+          smtpUserEncrypted: "enc_smtp_user",
+          smtpPassEncrypted: "enc_smtp_pass",
+          smtpHost: "smtp.test.com",
+          smtpPort: 587
+        }
+      }
+    })
+
+    await module.sendTransactionalEmail({
+      to: "cliente@test.com",
+      templateKey: "orderCreated",
+      templateParams: { orderCode: "TEST", total: "100" }
+    })
+
+    expect(mockEmailService.sendEmail).toHaveBeenCalledTimes(1)
+    
+    const callArgs = vi.mocked(mockEmailService.sendEmail).mock.calls[0][0]
+    expect(callArgs.apiKey).toBe("decrypted_api_key")
+    expect(callArgs.apiSecret).toBe("decrypted_api_secret")
+    expect(callArgs.smtpUser).toBe("decrypted_smtp_user")
+    expect(callArgs.smtpPass).toBe("decrypted_smtp_pass")
+    expect(callArgs.smtpHost).toBe("smtp.test.com")
+    expect(callArgs.smtpPort).toBe(587)
   })
 })

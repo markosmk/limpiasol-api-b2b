@@ -11,6 +11,12 @@ vi.mock("../module-manager", () => ({
 describe("DiscountsModule", () => {
   let discountsModule: DiscountsModule
 
+  const today = new Date()
+  // sum one year to current date
+  const validUntil = new Date(today.getFullYear() + 1, 11, 31)
+  const validIsoDate = validUntil.toISOString().slice(0, 10) // format YYYY-MM-DD
+  const expiredIsoDate = new Date(today.getFullYear() - 1, 11, 31).toISOString().slice(0, 10)
+
   beforeEach(() => {
     vi.clearAllMocks()
     discountsModule = new DiscountsModule()
@@ -96,7 +102,7 @@ describe("DiscountsModule", () => {
               code: "HOLAMUNDO",
               type: "percentage",
               value: 0.2, // 20% OFF
-              validUntil: "2025-12-31",
+              validUntil: validIsoDate,
               minPurchase: 5000
             }
           ]
@@ -211,7 +217,7 @@ describe("DiscountsModule", () => {
               code: "VALID123",
               type: "percentage",
               value: 0.1,
-              validUntil: "2025-12-31"
+              validUntil: validIsoDate
             }
           ]
         }
@@ -253,7 +259,7 @@ describe("DiscountsModule", () => {
               type: "percentage",
               value: 0.2,
               description: "20% OFF en verano",
-              validUntil: "2025-03-31",
+              validUntil: validIsoDate,
               minPurchase: 5000
             }
           ]
@@ -278,7 +284,7 @@ describe("DiscountsModule", () => {
               code: "EXPIRED",
               type: "percentage",
               value: 0.2,
-              validUntil: "2020-01-01"
+              validUntil: expiredIsoDate
             }
           ]
         }

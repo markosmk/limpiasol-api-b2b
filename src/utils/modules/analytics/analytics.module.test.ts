@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { moduleManager } from "../module-manager"
 import { AnalyticsModule } from "./analytics.module"
 
-vi.mock("./moduleManager", () => ({
+vi.mock("../module-manager", () => ({
   moduleManager: { getConfig: vi.fn() }
 }))
 
@@ -32,7 +32,10 @@ describe("AnalyticsModule", () => {
     it("tracks event successfully (mocked)", async () => {
       vi.mocked(moduleManager.getConfig).mockResolvedValue({
         enabled: true,
-        config: { provider: "google" }
+        config: { 
+          provider: "google",
+          googleConfig: { measurementId: "G-123" }
+        }
       })
 
       const result = await analyticsModule.trackEvent({
@@ -57,9 +60,9 @@ describe("AnalyticsModule", () => {
       })
 
       // Simular DNT en window
-      const originalNavigator = global.navigator
-      Object.defineProperty(global, "navigator", {
-        value: { doNotTrack: "1" },
+      const originalWindow = global.window
+      Object.defineProperty(global, "window", {
+        value: { navigator: { doNotTrack: "1" } },
         writable: true
       })
 
@@ -69,7 +72,7 @@ describe("AnalyticsModule", () => {
       expect(result.error).toContain("Do Not Track")
 
       // Restaurar
-      global.navigator = originalNavigator
+      global.window = originalWindow
     })
 
     it("excludes logged-in users when configured", async () => {
