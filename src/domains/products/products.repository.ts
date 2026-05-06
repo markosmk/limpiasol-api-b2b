@@ -766,18 +766,35 @@ export class ProductsRepository {
    * 3. Reglas del producto
    * 4. Reglas por defecto
    */
-  async getResolvedPurchaseRules(variantId: string): Promise<PurchaseRule | null> {
-    // 1. variante con su producto padre
-    const variant = await this.database.query.productVariants.findFirst({
-      where: eq(productVariants.id, variantId),
-      columns: { purchaseRules: true },
-      with: {
-        product: {
-          columns: { purchaseRules: true }
+  async getResolvedPurchaseRules(productId: string, variantId: string | null): Promise<PurchaseRule | null> {
+    let productRules: PurchaseRule | null = null
+    let variantRules: PurchaseRule | null = null
+
+    if (variantId) {
+      // 1. variante con su producto padre
+      const variant = await this.database.query.productVariants.findFirst({
+        where: eq(productVariants.id, variantId),
+        columns: { purchaseRules: true },
+        with: {
+          product: {
+            columns: { id: true, purchaseRules: true, status: true }
+          }
         }
-      }
-    })
-    if (!variant) return null
+      })
+      if (!variant || variant.product?.status !== "published") return null
+
+      productRules = variant.product?.purchaseRules || null
+      variantRules = variant.purchaseRules || null
+    } else {
+      // Solo el producto
+      const product = await this.database.query.products.findFirst({
+        where: and(eq(products.id, productId), eq(products.status, "published")),
+        columns: { purchaseRules: true }
+      })
+      if (!product) return null
+
+      productRules = product.purchaseRules || null
+    }
 
     // 2. reglas por defecto base
     const defaultRules: PurchaseRule = {
@@ -788,12 +805,11 @@ export class ProductsRepository {
     }
 
     // 3. Fusion: Default se pisa con Producto, Producto se pisa con Variante
-    // Si variant.purchaseRules es null/undefined, el spread operator {} lo ignora.
     return {
       ...defaultRules,
-      ...(variant.product?.purchaseRules || {}),
-      ...(variant.purchaseRules || {})
-    } // as PurchaseRule
+      ...(productRules || {}),
+      ...(variantRules || {})
+    }
   }
 }
 
