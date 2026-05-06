@@ -1,6 +1,5 @@
-import { appEvents, EventTypes } from "../emitter"
-
 import { notificationService } from "@/domains/notifications/notifications.service"
+import { appEvents, EventTypes } from "@/events/emitter"
 
 appEvents.on(EventTypes.USER_REGISTERED, async (payload) => {
   try {
@@ -18,7 +17,7 @@ appEvents.on(EventTypes.PASSWORD_RESET_REQUESTED, async (payload) => {
   }
 })
 
-appEvents.on(EventTypes.USER_REGISTERED, async (payload) => {
+appEvents.on(EventTypes.USER_WELCOME, async (payload) => {
   try {
     await notificationService.notifyWelcomeEmail(payload.email, payload.name)
   } catch (error) {
