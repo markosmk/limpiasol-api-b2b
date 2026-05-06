@@ -1,0 +1,70 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master]  # Solo cuando se hace push a main
+  pull_request:
+    branches: [main, master]  # En cada PR contra main
+
+# Evita corridas simultáneas del mismo PR/branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: myapp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm" # cachea el store de pnpm, no node_modules
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Push DB Schema
+        run: pnpm run test:push-db
+        env:
+          DATABASE_URL: postgres://testuser:testpass@localhost:5432/myapp_test
+
+      - name: Run tests
+        run: pnpm run test
+        env:
+          DATABASE_URL: postgres://testuser:testpass@localhost:5432/myapp_test
+          REDIS_URL: redis://localhost:6379
+          ENCRYPTION_KEY: test-key-32-chars-long-for-ci-only!!
+          PORT: 8080
+          APP_URL: http://localhost:8080
+          NODE_ENV: test
