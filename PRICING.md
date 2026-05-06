@@ -60,6 +60,9 @@ Al igual que los precios, **las reglas de compra se heredan**:
 ### Validación en el Carrito
 Antes de insertar o modificar un ítem en el carrito, el `carts.service.ts` llama a `pricingService.validateQuantity`. Este método junta la lógica de las reglas y evalúa si la cantidad solicitada (ej. `quantity: 5`) cumple con el mínimo exigido.
 
+> [!NOTE]
+> **Validación Incremental**: Al agregar productos al carrito (`POST /carts/items`), el sistema calcula la **nueva cantidad total** (cantidad actual + cantidad entrante) y valida ese total contra las reglas. Esto evita que un usuario sobrepase el límite máximo (`maxQuantity`) agregando unidades de forma fragmentada.
+
 ---
 
 ## 4. El Flujo Completo del Administrador

@@ -6,10 +6,28 @@ Este documento define los estándares arquitectónicos y de testing para el back
 
 Cada dominio (ej. `products`, `orders`, `collections`) vive en su propia carpeta bajo `src/domains/` y se divide estrictamente en estas responsabilidades:
 
+## Responsabilidades de Capas
+
 1. **`[dominio].routes.ts` (El Orquestador):** Define los endpoints usando Fastify. Se encarga de validar el *request* con Valibot, llamar a los servicios correspondientes y retornar la respuesta. **No contiene lógica de negocio.**
-2. **`[dominio].service.ts` (La Lógica de Negocio):** El cerebro de la operación. Aquí viven los cálculos (ej. *pricing*), validaciones de negocio y transformaciones.
-3. **`[dominio].repository.ts` (La Capa de Datos):** La única capa autorizada para hablar con la base de datos usando Drizzle ORM. Solo ejecuta sentencias SQL (Select, Insert, Update, Delete).
+2. **`[dominio].service.ts` (La Lógica de Negocio):** El cerebro de la operación. Aquí viven los cálculos (ej. *pricing*), validaciones de negocio y transformaciones. **Deben ser agnósticos a Fastify.**
+3. **`[dominio].repository.ts` (La Capa de Datos):** La única capa autorizada para hablar con la base de datos usando Drizzle ORM. Solo ejecuta sentencias SQL (Select, Insert, Update, Delete). **Tienen prohibido comunicarse con el mundo exterior (APIs HTTP externas).**
 4. **`[dominio].schema.ts` (Contratos):** Esquemas de validación de entradas y salidas definidos estrictamente con **Valibot**.
+
+---
+
+## Estrategia de Manejo de Errores
+
+El manejo de errores es centralizado y agnóstico a la capa de transporte (Fastify) siempre que sea posible.
+
+- **Services**: Usan `AppError` (`src/utils/app-error.ts`) con un diccionario de códigos (`ErrorCode`). Si el error no está en el diccionario, se usa el código `"custom"` pasando un mensaje manual.
+- **Routes**: Pueden usar `AppError` o helpers de `@fastify/sensible` (`reply.notFound()`, etc.) para errores rápidos de flujo.
+- **Captura Global de Errores** (`src/plugins/error-handler.ts`):
+  - **Valibot**: Transforma errores de validación en una respuesta estructurada con `code: "VALIDATION_ERROR"`.
+  - **AppError**: Devuelve el código de error para que el Frontend pueda reaccionar programáticamente (ej: i18n).
+  - **Seguridad y Logs**: Solo se loguean (vía `request.log` para incluir el ReqID) los errores 500 (descontrolados). Los errores 4xx se consideran "ruido de negocio" y no ensucian los logs principales.
+  - **Fallback**: Cualquier error inesperado devuelve un `internal_server_error` genérico, protegiendo la estructura interna.
+
+---
 
 ## Regla de Diseño: Clases e Inyección de Dependencias (DI)
 
