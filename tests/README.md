@@ -42,7 +42,6 @@ npx vitest run pricing
 - **Nombres descriptivos**: `it("returns 400 when quantity is below minimum")`.
 - **Arrange-Act-Assert**: Estructurar cada test en 3 bloques claros.
 - **Mocks en los bordes**: Mockear la DB en tests de servicios, no en tests `E2E`.
-- **Variables de entorno**: Usar `TEST_DATABASE_URL` para no tocar la DB de desarrollo.
 - **Cobertura**: Apuntar a `>80%` en lógica crítica (`pricing`, `auth`, `reglas de negocio`).
 
 ## Resumen
@@ -66,5 +65,5 @@ docker compose up -d lsol-postgres-test
 pnpm run test:push-db
 ```
 
-Asegúrate de tener la variable en tu archivo `.env`:
-`TEST_DATABASE_URL="postgres://postgres:root@localhost:5434/ecommerce_limpiasol_test"`
+Asegúrate de tener la variable en tu archivo `.env.test`:
+`DATABASE_URL="postgres://postgres:root@localhost:5434/ecommerce_limpiasol_test"`
