@@ -151,6 +151,8 @@ export const productCategories = pgTable(
   ]
 )
 
+export type ProductCategoryInsert = typeof productCategories.$inferInsert
+
 export const tags = pgTable(
   "tags",
   {
