@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config"
+import { defineConfig, configDefaults } from "vitest/config"
 import path from "path"
 
 export default defineConfig({
@@ -7,6 +7,7 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
     fileParallelism: false,
+    exclude: [...configDefaults.exclude, "build/**", "backup/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
