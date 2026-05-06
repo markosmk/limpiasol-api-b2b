@@ -23,7 +23,7 @@ vi.mock("./lib/orders.utils", () => ({
     productId: input.product.id,
     variantId: input.variant?.id,
     productName: input.product.name,
-    productSku: input.product.sku,
+    productSku: input.variant?.sku || input.product.sku,
     unitPrice: input.pricing.unitPrice.toFixed(2),
     quantity: input.quantity,
     lineSubtotal: input.pricing.finalSubtotal.toFixed(2),
@@ -81,7 +81,7 @@ describe("ordersService.createOrder", () => {
       items: [
         {
           productId: "prod_1",
-          variantId: null,
+          variantId: "var_1",
           quantity: 2,
           pricing: {
             unitPrice: 100,
@@ -191,7 +191,7 @@ describe("ordersService.createOrder", () => {
       items: [
         {
           productId: "prod_mutante",
-          variantId: null,
+          variantId: "var_mutante",
           quantity: 5, // <--- Cantidad vieja guardada en BD
           pricing: {
             unitPrice: 100,
